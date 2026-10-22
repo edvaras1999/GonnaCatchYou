@@ -1,0 +1,19 @@
+// Settings.h - Data\SKSE\Plugins\GoingCatchYou.ini
+#pragma once
+
+#include "skse/GameTypes.h"
+
+namespace Settings
+{
+	extern bool		enabled;			// bEnabled
+	extern UInt32	sampleMs;			// iSampleMs        how often the world is sampled
+	extern float	radius;				// fRadius          only NPCs this close to the player are watched
+	extern bool		allActors;			// bAllActors       also watch NPCs that have no weapon drawn (calibration)
+	extern UInt32	statusMs;			// iStatusMs        how often each watched NPC gets a status line
+	extern float	stallClosing;		// fStallClosing    closing speed (units/s) below which an NPC is "not advancing"
+	extern UInt32	stallMs;			// iStallMs         how long that has to last before it is reported
+	extern float	stallMinDistance;	// fStallMinDistance  an NPC nearer than this is not "stuck far away"
+	extern UInt32	maxTracks;			// iMaxTracks       the most NPCs watched at once
+
+	void Load();
+}
