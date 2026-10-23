@@ -13,9 +13,9 @@ namespace Settings
 	float	radius				= 3000.0f;
 	bool	allActors			= false;
 	UInt32	statusMs			= 2000;
-	float	stallClosing		= 25.0f;
+	float	stoppedSpeed		= 30.0f;
 	UInt32	stallMs				= 2000;
-	float	stallMinDistance	= 250.0f;
+	float	stallMinDistance	= 400.0f;
 	UInt32	maxTracks			= 12;
 
 	namespace
@@ -65,14 +65,14 @@ namespace Settings
 		v = ReadInt("iMaxTracks", 12);		maxTracks	= v < 1    ? 1    : (v > 64 ? 64 : (UInt32)v);
 
 		radius				= ReadFloat("fRadius", 3000.0f);
-		stallClosing		= ReadFloat("fStallClosing", 25.0f);
-		stallMinDistance	= ReadFloat("fStallMinDistance", 250.0f);
+		stoppedSpeed		= ReadFloat("fStoppedSpeed", 30.0f);
+		stallMinDistance	= ReadFloat("fStallMinDistance", 400.0f);
 		if(radius < 200.0f) radius = 200.0f;
 
 		_MESSAGE("settings: enabled %d, sample %u ms, radius %.0f, all actors %d, status %u ms, "
-				 "stall below %.0f u/s for %u ms beyond %.0f units, at most %u watched",
+				 "stopped below %.0f u/s for %u ms beyond %.0f units, at most %u watched",
 				 enabled ? 1 : 0, (unsigned int)sampleMs, radius, allActors ? 1 : 0,
-				 (unsigned int)statusMs, stallClosing, (unsigned int)stallMs,
+				 (unsigned int)statusMs, stoppedSpeed, (unsigned int)stallMs,
 				 stallMinDistance, (unsigned int)maxTracks);
 	}
 }

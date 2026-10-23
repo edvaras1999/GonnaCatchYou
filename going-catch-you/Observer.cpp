@@ -4,13 +4,16 @@
 //
 // Several times a second it walks the references in the player's cell, picks
 // out the NPCs that look like they are hunting the player, and keeps a short
-// history of each: how far away it is, how fast the gap is closing, whether it
-// is on the ground or in the air, whether it is still moving. From that it
+// history of each: how far away it is, how fast it is really moving (worked out from
+// its own positions - the engine's speed and movement flags proved unreliable on
+// this edition), how fast the gap is closing, and whether it is on the ground
+// or in the air. The raw flag words are written in hex so they can be decoded
+// against what the NPC was seen doing. From that it
 // writes three kinds of line to GoingCatchYou.log:
 //
 //   appeared / left   an NPC started or stopped being watched
 //   track             a status line per watched NPC every iStatusMs
-//   STALL / resumed   an NPC that is not getting closer although it is far away
+//   STOPPED / moving again   an NPC that has itself stopped although it is far away
 //
 // It changes nothing in the game. Not a position, not a flag, not an animation.
 //
@@ -65,6 +68,9 @@ namespace
 		DWORD	stallSinceMs;
 		float	lastDist;
 		float	closing;			// smoothed, units per second, positive = getting closer
+		float	vel;				// own horizontal speed from its positions, smoothed, units per second
+		float	velZ;				// own vertical speed, smoothed
+		NiPoint3 lastPos;
 		float	minDist;
 		bool	primed;				// closing has a first real measurement
 		UInt32	stalls;
@@ -75,6 +81,10 @@ namespace
 	std::vector<Track>	s_tracks;
 
 	DWORD	s_lastSample	= 0;
+	NiPoint3 s_playerPos;
+	DWORD	s_playerMs		= 0;
+	float	s_playerVel		= 0.0f;
+	UInt32	s_playerCell	= 0;
 	DWORD	s_lastScanLog	= 0;
 	UInt32	s_faults		= 0;
 	bool	s_dead			= false;
@@ -98,21 +108,6 @@ namespace
 		return "?";
 	}
 
-	void FlagsText(UInt32 f1, char * out, size_t size)
-	{
-		out[0] = 0;
-		if(f1 & Engine::kFlag1_MovingForward)	strcat_s(out, size, "fwd ");
-		if(f1 & Engine::kFlag1_MovingBack)		strcat_s(out, size, "back ");
-		if(f1 & Engine::kFlag1_MovingLeft)		strcat_s(out, size, "left ");
-		if(f1 & Engine::kFlag1_MovingRight)		strcat_s(out, size, "right ");
-		if(f1 & Engine::kFlag1_Walking)			strcat_s(out, size, "walk ");
-		if(f1 & Engine::kFlag1_Running)			strcat_s(out, size, "run ");
-		if(f1 & Engine::kFlag1_Sprinting)		strcat_s(out, size, "sprint ");
-		if(f1 & Engine::kFlag1_Sneaking)		strcat_s(out, size, "sneak ");
-		if(f1 & Engine::kFlag1_Swimming)		strcat_s(out, size, "swim ");
-		if(!out[0])								strcat_s(out, size, "-");
-	}
-
 	Track * FindTrack(UInt32 id)
 	{
 		for(size_t i = 0; i < s_tracks.size(); ++i)
@@ -130,6 +125,22 @@ namespace
 		TESObjectCELL * cell = Engine::ParentCell(player);
 		if(!cell || !Engine::Readable(cell, 0x80))
 			return;
+
+		// The player's own speed, so "it is not getting closer" can be told from
+		// "the player is running away".
+		if(cell->formID != s_playerCell)
+		{
+			s_playerCell = cell->formID;	// a cell change is a jump, not a speed
+			s_playerMs = 0;
+		}
+		if(s_playerMs && now > s_playerMs)
+		{
+			const float pdx = pp.x - s_playerPos.x, pdy = pp.y - s_playerPos.y;
+			const float pv = sqrtf(pdx * pdx + pdy * pdy) / ((float)(now - s_playerMs) / 1000.0f);
+			s_playerVel = 0.5f * s_playerVel + 0.5f * pv;
+		}
+		s_playerPos = pp;
+		s_playerMs = now;
 
 		for(size_t i = 0; i < s_tracks.size(); ++i)
 			s_tracks[i].seen = false;
@@ -192,6 +203,7 @@ namespace
 				fresh.lastStatusMs	= 0;
 				fresh.lastDist		= dist;
 				fresh.minDist		= dist;
+				fresh.lastPos		= np;
 				s_tracks.push_back(fresh);
 				t = &s_tracks.back();
 
@@ -204,40 +216,51 @@ namespace
 			if(dt > 0.01f)
 			{
 				const float closing = (t->lastDist - dist) / dt;
+				const float mx = np.x - t->lastPos.x, my = np.y - t->lastPos.y, mz = np.z - t->lastPos.z;
+				const float vel = sqrtf(mx * mx + my * my) / dt;
+				const float velZ = mz / dt;
+
 				t->closing = t->primed ? 0.5f * t->closing + 0.5f * closing : closing;
+				t->vel = t->primed ? 0.5f * t->vel + 0.5f * vel : vel;
+				t->velZ = t->primed ? 0.5f * t->velZ + 0.5f * velZ : velZ;
 				t->primed = true;
 				t->lastDist = dist;
+				t->lastPos = np;
 				t->lastMs = now;
 			}
 			if(dist < t->minDist) t->minDist = dist;
 
-			const float speed = Engine::MovementSpeed(npc);
 			const UInt32 f1 = Engine::ActorFlags1(npc);
+			const UInt32 f2 = Engine::ActorFlags2(npc);
 			const UInt32 state = Engine::ControllerState(chain.controller);
-			char flags[96];
-			FlagsText(f1, flags, sizeof(flags));
 
-			// ------------------------------------------------------ stall
-			const bool slow = t->primed && t->closing < Settings::stallClosing;
+			// ----------------------------------------------------- stopped
+			// The NPC itself has (nearly) stopped, and it is far from the
+			// player. This is the case that matters: a hunter that has run out
+			// of path. An NPC that is moving but not getting closer is the player
+			// running away, and is not an event.
+			const bool stoppedNow = t->primed && t->vel < Settings::stoppedSpeed;
 			const bool farAway = dist > Settings::stallMinDistance;
-			if(slow && farAway)
+			if(stoppedNow && farAway)
 			{
 				if(!t->stallSinceMs) t->stallSinceMs = now;
 				if(!t->stalled && now - t->stallSinceMs >= Settings::stallMs)
 				{
 					t->stalled = true;
 					++t->stalls;
-					_MESSAGE("observer: STALL %08X not getting closer for %.1f s: %.0f units away "
-							 "(h %.0f, dz %+.0f), closing %+.0f u/s, speed %.0f, %s, moving [%s], attack %u",
+					_MESSAGE("observer: STOPPED %08X for %.1f s, %.0f units from the player "
+							 "(h %.0f, dz %+.0f), own speed %.0f u/s (vz %+.0f), player %.0f u/s, %s, "
+							 "f1=%08X f2=%08X attack %u",
 							 (unsigned int)id, (float)(now - t->stallSinceMs) / 1000.0f, dist, hdist, dz,
-							 t->closing, speed, StateName(state), flags, (unsigned int)Engine::AttackState(npc));
+							 t->vel, t->velZ, s_playerVel, StateName(state),
+							 (unsigned int)f1, (unsigned int)f2, (unsigned int)Engine::AttackState(npc));
 				}
 			}
 			else
 			{
 				if(t->stalled)
-					_MESSAGE("observer: resumed %08X after %.1f s: %.0f units away, closing %+.0f u/s",
-							 (unsigned int)id, (float)(now - t->stallSinceMs) / 1000.0f, dist, t->closing);
+					_MESSAGE("observer: moving again %08X after %.1f s: %.0f units from the player, own speed %.0f u/s",
+							 (unsigned int)id, (float)(now - t->stallSinceMs) / 1000.0f, dist, t->vel);
 				t->stalled = false;
 				t->stallSinceMs = 0;
 			}
@@ -246,11 +269,12 @@ namespace
 			if(now - t->lastStatusMs >= Settings::statusMs)
 			{
 				t->lastStatusMs = now;
-				_MESSAGE("observer: track %08X %.0f units (h %.0f, dz %+.0f) closing %+.0f u/s speed %.0f "
-						 "%s moving [%s] attack %u weapon %s%s",
-						 (unsigned int)id, dist, hdist, dz, t->closing, speed, StateName(state), flags,
+				_MESSAGE("observer: track %08X %.0f units (h %.0f, dz %+.0f) closing %+.0f u/s, own speed %.0f u/s "
+						 "(vz %+.0f), player %.0f u/s, %s, f1=%08X f2=%08X attack %u weapon %s%s",
+						 (unsigned int)id, dist, hdist, dz, t->closing, t->vel, t->velZ, s_playerVel,
+						 StateName(state), (unsigned int)f1, (unsigned int)f2,
 						 (unsigned int)Engine::AttackState(npc), drawn ? "drawn" : "away",
-						 t->stalled ? " STALLED" : "");
+						 t->stalled ? " STOPPED" : "");
 			}
 		}
 
