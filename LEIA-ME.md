@@ -28,7 +28,7 @@ O plugin é independente: não precisa do FreeRun. Para o log sair limpo, não u
 
 ## 3. Testar
 
-1. **Carrega um save** (o relógio só liga quando o jogo cria o grafo de animação do jogador; num ecrã de título não há nada a ver).
+1. **Carrega um save.** O relógio é o `Update` da câmara (primeira ou terceira pessoa), por isso só bate com o jogo a correr: não bate no menu principal, nem a cavalo ou num dragão (câmaras próprias).
 2. Provoca perseguições: inimigos hostis com arma desembainhada a ir atrás de ti; depois sobe a um sítio alto ou atrás de um obstáculo onde eles não cheguem a pé, e espera uns segundos.
 3. Uns 5 a 10 minutos chegam. Sai do jogo.
 4. Envia `Documents\My Games\Skyrim\SKSE\GoingCatchYou.log`.
@@ -38,6 +38,8 @@ O plugin é independente: não precisa do FreeRun. Para o log sair limpo, não u
 | Linha | Significado |
 |---|---|
 | `heartbeat: the first tick arrived` | o relógio funciona (sem esta linha, nada mais vai aparecer) |
+| `observer: the first sample` | o jogador está pronto e o plugin começou a olhar à volta |
+| `observer: ticks arrive, but the player is not ready` | o relógio bate mas o jogador não passa a verificação de leitura; diz-me o que esta linha mostra |
 | `verify: … sites - 0 wrong` | os endereços batem com o executável |
 | `observer: cell …: N references, M NPCs, K within …, W watched` | resumo a cada 5 s |
 | `observer: + <id> appeared` / `- <id> left` | um NPC começou / deixou de ser observado |

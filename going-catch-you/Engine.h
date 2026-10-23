@@ -117,22 +117,6 @@ namespace Engine
 
 	inline UInt32 ControllerState(void * ctrl)	{ return *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState); }
 
-	// --------------------------------------------------------------- memory
-
-	// The game's own heap. Anything the engine will later free itself has to
-	// come from here.
-	inline void * HeapAllocate(UInt32 size, UInt32 alignment, bool aligned)
-	{
-		typedef void * (__thiscall * fn_t)(void *, UInt32, UInt32, bool);
-		return ((fn_t)0x00A48D60)((void *)0x01B418B0, size, alignment, aligned);
-	}
-
-	inline void HeapFree(void * mem, bool aligned)
-	{
-		typedef void (__thiscall * fn_t)(void *, void *, bool);
-		((fn_t)0x00A487B0)((void *)0x01B418B0, mem, aligned);
-	}
-
 	// ----------------------------------------------------------------- 3D
 
 	// TESObjectREFR::GetNiRootNode(firstPerson) is vtable slot 0x6F in the SKSE

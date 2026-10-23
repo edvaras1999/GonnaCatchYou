@@ -80,6 +80,9 @@ namespace
 	bool	s_dead			= false;
 	bool	s_firstTick		= false;
 	bool	s_fullWarned	= false;
+	bool	s_sampled		= false;
+	bool	s_notReadyLogged = false;
+	DWORD	s_firstTickMs	= 0;
 
 	const char * StateName(UInt32 s)
 	{
@@ -297,25 +300,47 @@ namespace Observer
 		s_lastSample	= 0;
 		s_lastScanLog	= 0;
 		s_fullWarned	= false;
+		s_sampled		= false;
+		s_notReadyLogged = false;
+		s_firstTickMs	= GetTickCount();
 		Engine::ForgetMemoryLayout();
 	}
 
-	void OnTick(Actor * owner)
+	void OnTick()
 	{
 		if(s_dead || !Settings::enabled) return;
+
+		const DWORD now = GetTickCount();
 
 		if(!s_firstTick)
 		{
 			s_firstTick = true;
+			s_firstTickMs = now;
 			_MESSAGE("heartbeat: the first tick arrived - the plugin is alive");
 		}
 
-		const DWORD now = GetTickCount();
 		if(now - s_lastSample < Settings::sampleMs) return;
 		s_lastSample = now;
 
 		Actor * player = (Actor *)Engine::Player();
-		if(!player || !Engine::ActorIsBuilt(player)) return;
+		if(!player || !Engine::ActorIsBuilt(player))
+		{
+			// Ticks arrive but there is nothing to look at yet. Said once, so a
+			// silent log can be told apart from a plugin that never ticked.
+			if(!s_notReadyLogged && now - s_firstTickMs > 5000)
+			{
+				s_notReadyLogged = true;
+				_MESSAGE("observer: ticks arrive, but the player is not ready (player %p, readable %d); "
+						 "waiting", (void *)player, Engine::Readable(player, 0x140) ? 1 : 0);
+			}
+			return;
+		}
+
+		if(!s_sampled)
+		{
+			s_sampled = true;
+			_MESSAGE("observer: the first sample - the player is ready, looking around");
+		}
 
 		if(!GuardedSample(player, now))
 		{
