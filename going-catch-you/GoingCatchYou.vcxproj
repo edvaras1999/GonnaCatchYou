@@ -135,6 +135,7 @@
     <ClCompile Include="Settings.cpp" />
     <ClCompile Include="Tick.cpp" />
     <ClCompile Include="Observer.cpp" />
+    <ClCompile Include="Havok.cpp" />
     <ClCompile Include="Verify.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -142,6 +143,7 @@
     <ClInclude Include="Settings.h" />
     <ClInclude Include="Tick.h" />
     <ClInclude Include="Observer.h" />
+    <ClInclude Include="Havok.h" />
     <ClInclude Include="Verify.h" />
     <ClInclude Include="Signatures.h" />
     <ClInclude Include="Log.h" />

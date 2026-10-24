@@ -1,63 +1,54 @@
-# Going Catch You — passo 1 (só observa)
+# Going Catch You — versão 0.2.0 (só lê)
 
-Este passo **não altera nada no jogo**. Serve para confirmar três coisas antes de qualquer movimento:
+Este passo **não altera nada no jogo**. Serve para responder, de uma vez, a tudo o que o mod precisa de saber antes de começar a mexer nos NPCs. Depois dele, o passo seguinte já é construir o mod.
 
-1. o plugin carrega na LE 1.9.32.0.8 e os endereços batem certo;
-2. o "relógio" por frame funciona;
-3. dá para ver os NPCs que andam atrás do jogador e perceber onde ficam presos.
+> **Estado:** a base (carregar, verificar endereços, relógio por frame, ler NPCs) foi testada em jogo nas versões 0.1.0 a 0.1.2. **Tudo o que é novo na 0.2.0 ainda não foi testado**: o combate pelo motor, a leitura do mundo (raycasts), a leitura do controlador e a sonda comparativa. Se a compilação falhar, envia o `build.log`.
 
-> **Aviso honesto:** este código foi escrito e verificado só na sintaxe, **não foi compilado com o SKSE real nem testado em jogo**. Pode haver erros de compilação (ver o ponto 5). Se houver, envia o `build.log`.
+## O que mudou em relação à 0.1.2
 
-## 1. Compilar (GitHub)
+- **Quem caça o jogador** passa a ser decidido pela chamada do próprio motor `IsInCombat` (a mesma que o GreenTea usa), em vez de "arma desembainhada". Funciona com pessoas, criaturas e cavalos.
+- **Leitura do mundo em volta de um caçador parado** (`world`): altura do obstáculo à frente, se o chão desce adiante, e se vê o jogador. São os números que um salto vai precisar.
+- **Leitura do controlador** do NPC (velocidade, tempo de queda, apoio), para comparar com a velocidade calculada pelas posições.
+- **Sonda comparativa**: compara NPCs em combate com NPCs que não estão, campo a campo, para descobrir onde o motor guarda o alvo de combate. Já não precisas de anotar IDs na consola.
+- **Custo**: o log diz quantos ticks por segundo recebe e quanto tempo demora cada amostra.
 
-1. Põe o conteúdo desta pasta num repositório teu (incluindo a pasta oculta `.github`).
-2. Aba **Actions** → **Compilar Going Catch You (passo 1: observar)** → **Run workflow**.
-3. Quando acabar, descarrega o artefacto **resultado**: tem `GoingCatchYou.dll` e `build.log`.
-4. Se falhar, envia o `build.log` (ou as primeiras linhas com `error`).
+## 1. Compilar
 
-O workflow descarrega o SKSE 1.7.3. Se o download falhar, o plano B é o mesmo de antes: pôr `skse_1_07_03.7z` em `third_party/`.
+Substitui a pasta `going-catch-you` do repositório pela deste ZIP (há ficheiros novos: `Havok.h` e `Havok.cpp`, e o `GoingCatchYou.vcxproj` mudou). O workflow não muda. Corre-o em **Actions** e descarrega o artefacto **resultado**.
 
 ## 2. Instalar
 
-Copia para `Data\SKSE\Plugins\`:
+Copia `GoingCatchYou.dll` e `GoingCatchYou.ini` (de `dist\Data\SKSE\Plugins\`) para `Data\SKSE\Plugins\`. **Troca o INI antigo**: há chaves novas.
 
-- `GoingCatchYou.dll` (do artefacto)
-- `GoingCatchYou.ini` (de `dist\Data\SKSE\Plugins\`)
+## 3. Testar (uns 10 minutos chegam)
 
-O plugin é independente: não precisa do FreeRun. Para o log sair limpo, não uses ao mesmo tempo o módulo de teste de NPCs do projeto anterior (o `FreerunLE.dll` com `[Npc]`), porque ele também mexe nos NPCs.
-
-## 3. Testar
-
-1. **Carrega um save.** O relógio é o `Update` da câmara (primeira ou terceira pessoa), por isso só bate com o jogo a correr: não bate no menu principal, nem a cavalo ou num dragão (câmaras próprias).
-2. Provoca perseguições: inimigos hostis com arma desembainhada a ir atrás de ti; depois sobe a um sítio alto ou atrás de um obstáculo onde eles não cheguem a pé, e espera uns segundos.
-3. Uns 5 a 10 minutos chegam. Sai do jogo.
-4. Envia `Documents\My Games\Skyrim\SKSE\GoingCatchYou.log`.
+1. Carrega um save e **fica perto de NPCs que não estão em combate** (uma cidade serve): a sonda precisa de pelo menos 5 desses.
+2. Entra em combate com **inimigos de vários tipos**: um bandido ou outro inimigo corpo a corpo, uma criatura (lobo, urso, aranha), e se puderes um arqueiro. A sonda precisa de pelo menos 5 amostras de NPCs em combate.
+3. **Foge para um sítio onde o inimigo não consiga chegar a pé**: em cima de uma rocha, de um muro ou de um telhado. É aí que aparecem as linhas `STOPPED` e `world`.
+4. Se o cavalo entrar na luta, melhor.
+5. Sai do jogo e envia `Documents\My Games\Skyrim\SKSE\GoingCatchYou.log`.
 
 ## 4. O que o log mostra
 
 | Linha | Significado |
 |---|---|
-| `heartbeat: the first tick arrived` | o relógio funciona (sem esta linha, nada mais vai aparecer) |
-| `observer: the first sample` | o jogador está pronto e o plugin começou a olhar à volta |
-| `observer: ticks arrive, but the player is not ready` | o relógio bate mas o jogador não passa a verificação de leitura; diz-me o que esta linha mostra |
-| `verify: … sites - 0 wrong` | os endereços batem com o executável |
-| `observer: cell …: N references, M NPCs, K within …, W watched` | resumo a cada 5 s |
-| `observer: + <id> appeared` / `- <id> left` | um NPC começou / deixou de ser observado |
-| `observer: track <id> …` | estado de cada NPC a cada 2 s: distância, dz (diferença de altura), velocidade de aproximação (`closing`), velocidade própria do NPC e do jogador (calculadas a partir das posições), estado no chão ou no ar, e as palavras de flags do motor em hexadecimal (`f1`, `f2`) |
-| `observer: STOPPED <id> …` | o próprio NPC parou (velocidade dele abaixo de `fStoppedSpeed`) estando longe do jogador |
-| `observer: moving again <id> …` | voltou a andar |
-
-Os ids são formIDs: com a consola aberta, clica num NPC e vês o id dele.
+| `heartbeat: the first tick arrived` / `observer: the first sample` | o relógio e o jogador estão prontos |
+| `observer: cell …` (a cada 5 s) | resumo: NPCs na célula, quantos em combate, se o jogador está em combate, ticks por segundo, e quanto tempo demora uma amostra |
+| `observer: + <id> (base <id>) appeared` | um NPC em combate passou a ser observado (`base` é o tipo de NPC; serve para saber se é lobo, bandido, etc.) |
+| `observer: track <id> …` | estado a cada 2 s: distância, altura relativa (`dz`), velocidade própria calculada pelas posições, velocidade do controlador (`ctrl`), tempo de queda, apoio, estado de ataque, flags `f1`/`f2` em hexadecimal |
+| `observer: STOPPED <id> …` | o próprio NPC parou, longe do jogador, e não é arqueiro |
+| `observer: world <id> …` | o que está à frente de um caçador parado: `[25:140(L1) 70:140(L1) 120:clear 170:clear]` é a distância a que cada raio (a 25, 70, 120 e 170 unidades de altura) bate e em que camada; `-> obstacle, top between 70 and 120` é a conclusão; `ground ahead [60:-5 140:-300]` é a altura do chão 60 e 140 unidades adiante em relação aos pés (negativo é uma queda); `line of sight` diz se ele vê o jogador |
+| `observer: probe: … fields that tell them apart` (a cada 30 s) | os campos que separam NPCs em combate dos que não estão. Se o valor for o handle do jogador, a linha diz-o |
+| `observer: - <id> left` | deixou de ser observado |
 
 ## 5. Limitações conhecidas
 
-- **"Em combate com o jogador" é uma aproximação.** O endereço do alvo de combate ainda não foi encontrado nesta edição. Um NPC é observado se estiver vivo, perto e com **arma desembainhada**. Seguidores em combate também entram; caçadores com a arma guardada não. `bAllActors=1` observa todos, para comparar.
+- **`IsInCombat` diz que o NPC está em combate, não contra quem.** A sonda procura o campo do alvo de combate; se não achar, o passo seguinte decide com a distância e a visão.
 - **Só vê a célula onde o jogador está.** Num exterior, um inimigo na célula ao lado não aparece.
-- **Arqueiros, magos e seguidores parados dão `STOPPED` normalmente.** O estado de ataque (`attack`) e as flags (`f1`, `f2`) vêm em cada linha para os filtrar mais tarde.
-- **A velocidade e as flags de movimento que o motor dá não são fiáveis nesta edição** (a primeira versão mostrava sempre o mesmo texto de movimento e velocidades sem sentido). Por isso a velocidade passou a ser calculada a partir das posições.
-- **Ponto de risco na compilação:** a lista de referências da célula (`cell->objectList`) vem dos cabeçalhos do SKSE 1.7.3 e foi escrita de memória. Se o nome ou o `#include "skse/GameForms.h"` não existir, o erro aponta para `Observer.cpp` ou `Engine.h`, e a correção é de uma linha.
+- **Arqueiros ficam fora dos `STOPPED`**: os estados de ataque 7 a 15 são o ciclo do arco e aparecem como `(ranged)`.
+- **O tipo de NPC só aparece como `base <id>`**, não como nome. Se quiseres saber qual é, abre a consola e escreve o id.
+- **A velocidade e as flags de movimento que o motor dá não são fiáveis** nesta edição; por isso a velocidade é calculada pelas posições.
 
-## 6. Passos seguintes
+## 6. Depois deste passo
 
-2. **Salto:** os NPCs parados (`STOPPED`) passam o que os trava.
-3. **Trepar:** os que não saltam sobem com animações, opcionalmente as do FreeRun se estiver instalado.
+O passo seguinte já é construir: com a classificação, o obstáculo e o apoio lidos, os caçadores parados passam a saltar o que os trava.

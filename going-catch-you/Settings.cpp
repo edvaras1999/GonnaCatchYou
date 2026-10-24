@@ -16,6 +16,14 @@ namespace Settings
 	float	stoppedSpeed		= 30.0f;
 	UInt32	stallMs				= 2000;
 	float	stallMinDistance	= 400.0f;
+	bool	includeDrawn		= false;
+	bool	cast				= true;
+	UInt32	castMs				= 1000;
+	float	castDistance		= 300.0f;
+	UInt32	summaryMs			= 30000;
+	UInt32	keepMs				= 5000;
+	bool	probe				= true;
+	UInt32	probeMs				= 4000;
 	UInt32	maxTracks			= 12;
 
 	namespace
@@ -62,17 +70,27 @@ namespace Settings
 		v = ReadInt("iSampleMs", 500);		sampleMs	= v < 50   ? 50   : (UInt32)v;
 		v = ReadInt("iStatusMs", 2000);		statusMs	= v < 250  ? 250  : (UInt32)v;
 		v = ReadInt("iStallMs", 2000);		stallMs		= v < 250  ? 250  : (UInt32)v;
+		probe				= ReadInt("bProbe", 1) != 0;
+		includeDrawn		= ReadInt("bIncludeWeaponDrawn", 0) != 0;
+		cast				= ReadInt("bCast", 1) != 0;
+		v = ReadInt("iCastMs", 1000);		castMs		= v < 200  ? 200  : (UInt32)v;
+		v = ReadInt("iSummaryMs", 30000);	summaryMs	= v < 5000 ? 5000 : (UInt32)v;
+		v = ReadInt("iKeepMs", 5000);		keepMs		= v < 0    ? 0    : (UInt32)v;
+		v = ReadInt("iProbeMs", 4000);		probeMs		= v < 500  ? 500  : (UInt32)v;
 		v = ReadInt("iMaxTracks", 12);		maxTracks	= v < 1    ? 1    : (v > 64 ? 64 : (UInt32)v);
 
 		radius				= ReadFloat("fRadius", 3000.0f);
+		castDistance		= ReadFloat("fCastDistance", 300.0f);
+		if(castDistance < 100.0f) castDistance = 100.0f;
 		stoppedSpeed		= ReadFloat("fStoppedSpeed", 30.0f);
 		stallMinDistance	= ReadFloat("fStallMinDistance", 400.0f);
 		if(radius < 200.0f) radius = 200.0f;
 
 		_MESSAGE("settings: enabled %d, sample %u ms, radius %.0f, all actors %d, status %u ms, "
-				 "stopped below %.0f u/s for %u ms beyond %.0f units, at most %u watched",
+				 "stopped below %.0f u/s for %u ms beyond %.0f units, keep %u ms, probe %d every %u ms, world cast %d every %u ms over %.0f units, weapon-drawn too %d, at most %u watched",
 				 enabled ? 1 : 0, (unsigned int)sampleMs, radius, allActors ? 1 : 0,
 				 (unsigned int)statusMs, stoppedSpeed, (unsigned int)stallMs,
-				 stallMinDistance, (unsigned int)maxTracks);
+				 stallMinDistance, (unsigned int)keepMs, probe ? 1 : 0, (unsigned int)probeMs,
+				 cast ? 1 : 0, (unsigned int)castMs, castDistance, includeDrawn ? 1 : 0, (unsigned int)maxTracks);
 	}
 }

@@ -35,14 +35,22 @@ namespace Engine
 
 	namespace Controller
 	{
+		// Offsets confirmed in the constructor at 0x00D1E850 (FreeRun NPC project).
 		enum
 		{
-			kCurrentState	= 0x1A0,	// hkpCharacterContext state, read by 0x00D42B80
-			kFlags			= 0x1B8,
-			kSpeedPct		= 0x204,
+			kForwardVec			= 0x040,
+			kSurfaceInfo		= 0x150,	// supportedState is the first byte
+			kContext			= 0x190,
+			kCurrentState		= 0x1A0,
+			kFlags				= 0x1B8,
+			kWaterHeight		= 0x1D8,
+			kFallStartHeight	= 0x1E0,
+			kFallTime			= 0x1E4,
+			kSpeedPct			= 0x204,
 		};
 
 		enum { kState_OnGround = 0, kState_Jumping = 1, kState_InAir = 2, kState_Climbing = 3, kState_Flying = 4, kState_Swimming = 5 };
+		enum { kSupport_Unsupported = 0, kSupport_Sliding = 1, kSupport_Supported = 2 };
 	}
 
 	struct Chain
@@ -57,6 +65,14 @@ namespace Engine
 
 	// Is this actor far enough along to be asked anything? 3D, and a whole chain.
 	bool ActorIsBuilt(void * actor);
+
+	// ---------------------------------------------------------------- units
+
+	// The physics world runs in metres, the game world in units. Every vector
+	// that crosses that border is scaled. The engine keeps the factor in three
+	// places; this is the one the vanilla ray cast uses.
+	inline float HavokScale()				{ return *(float *)0x01B11570; }
+	inline float HavokScaleInverse()		{ const float s = HavokScale(); return s != 0.0f ? 1.0f / s : 69.99125f; }
 
 	// ------------------------------------------------------------ singletons
 
@@ -131,5 +147,68 @@ namespace Engine
 
 		typedef NiNode * (__thiscall * fn_t)(void *, UInt32);
 		return ((fn_t)vtable[0x6F])(ref, firstPerson ? 1 : 0);
+	}
+
+	// -------------------------------------------- character controller, read
+
+	inline void * CharController(Actor * actor)
+	{
+		Chain chain;
+		return ActorChain(actor, chain) ? chain.controller : NULL;
+	}
+
+	inline UInt8  ControllerSupport(void * ctrl)	{ return *(UInt8 *)((UInt8 *)ctrl + Controller::kSurfaceInfo); }
+	inline float  ControllerFallTime(void * ctrl)	{ return *(float *)((UInt8 *)ctrl + Controller::kFallTime); }
+
+	// The controller's virtual calls. Slot indices match Special Edition's and
+	// were used for writing in the FreeRun NPC project; here they only read.
+	// Slot 6 = linear velocity (metres per second), slot 8 = collision filter.
+	inline bool ControllerGetLinearVelocity(void * ctrl, float * outVec4)
+	{
+		if(!Readable(ctrl, sizeof(void *))) return false;
+		void ** vtable = *(void ***)ctrl;
+		if(!Readable(vtable, 9 * sizeof(void *))) return false;
+		typedef void (__thiscall * fn_t)(void *, float *);
+		((fn_t)vtable[6])(ctrl, outVec4);
+		return true;
+	}
+
+	inline UInt32 ControllerCollisionFilter(void * ctrl)
+	{
+		UInt32 out = 0;
+		typedef UInt32 * (__thiscall * fn_t)(void *, UInt32 *);
+		(*(fn_t **)ctrl)[8](ctrl, &out);
+		return out;
+	}
+
+	// ------------------------------------------------------------------ combat
+
+	// The engine's own "is this actor in combat", found in GreenTea.dll, which
+	// implements its IsInCombat condition as exactly this one call: vtable
+	// offset 0x388, slot 0xE2, no arguments. It does not depend on a weapon
+	// (wolves, trolls and horses answer it too) and says nothing about WHO the
+	// actor is fighting.
+	inline bool IsInCombat(Actor * actor)
+	{
+		if(!Readable(actor, sizeof(void *))) return false;
+		void ** vtable = *(void ***)actor;
+		if(!Readable(vtable, (0xE2 + 1) * sizeof(void *))) return false;
+		typedef bool (__thiscall * fn_t)(void *);
+		return ((fn_t)vtable[0xE2])(actor);
+	}
+
+	// --------------------------------------------------------------- memory
+
+	// The game's own heap. The Havok layer allocates its collision shapes here.
+	inline void * HeapAllocate(UInt32 size, UInt32 alignment, bool aligned)
+	{
+		typedef void * (__thiscall * fn_t)(void *, UInt32, UInt32, bool);
+		return ((fn_t)0x00A48D60)((void *)0x01B418B0, size, alignment, aligned);
+	}
+
+	inline void HeapFree(void * mem, bool aligned)
+	{
+		typedef void (__thiscall * fn_t)(void *, void *, bool);
+		((fn_t)0x00A487B0)((void *)0x01B418B0, mem, aligned);
 	}
 }

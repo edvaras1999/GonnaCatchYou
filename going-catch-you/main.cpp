@@ -31,7 +31,7 @@
 
 #define PLUGIN_NAME				"GoingCatchYou"
 #define PLUGIN_LOG_FILE			"\\My Games\\Skyrim\\SKSE\\GoingCatchYou.log"
-#define PLUGIN_VERSION_STRING	"0.1.1-step1"
+#define PLUGIN_VERSION_STRING	"0.2.0-read"
 
 static PluginHandle				g_pluginHandle	= kPluginHandle_Invalid;
 static SKSEMessagingInterface *	g_messaging		= NULL;
