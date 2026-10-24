@@ -1,10 +1,16 @@
-# Going Catch You — versão 0.2.0 (só lê)
+# Going Catch You — versão 0.2.1 (só lê)
 
 Este passo **não altera nada no jogo**. Serve para responder, de uma vez, a tudo o que o mod precisa de saber antes de começar a mexer nos NPCs. Depois dele, o passo seguinte já é construir o mod.
 
-> **Estado:** a base (carregar, verificar endereços, relógio por frame, ler NPCs) foi testada em jogo nas versões 0.1.0 a 0.1.2. **Tudo o que é novo na 0.2.0 ainda não foi testado**: o combate pelo motor, a leitura do mundo (raycasts), a leitura do controlador e a sonda comparativa. Se a compilação falhar, envia o `build.log`.
+> **Estado:** a base (carregar, verificar endereços, relógio por frame, ler NPCs) e o `IsInCombat` do motor foram testados em jogo. **Ainda não foram testados** a leitura do mundo (raycasts), a leitura do controlador e a sonda de NPCs em combate: na 0.2.0 a leitura do controlador falhou no primeiro NPC em combate (um vetor sem alinhamento a 16 bytes) e o plugin desligou-se. A 0.2.1 corrige isso. Se a compilação falhar, envia o `build.log`.
 
-## O que mudou em relação à 0.1.2
+## O que mudou na 0.2.1
+
+- **Velocidade do controlador:** o vetor passa a ser alinhado a 16 bytes dentro da própria função.
+- **Leituras isoladas:** a leitura do controlador, a leitura do mundo (`world`) e a sonda correm cada uma com a sua própria proteção. Se uma falhar, só se perde essa leitura; ao fim de 3 falhas essa funcionalidade desliga-se, e o log diz qual (`switched off`). O resto continua.
+- **Sonda:** pára de amostrar NPCs sem combate às 40 amostras (já chegam), o que tira o custo que causava os picos de 9 a 25 ms. Passou a aceitar também campos que só existem em NPCs em combate, e destaca os que contêm o handle do jogador.
+
+## O que a série 0.2 trouxe em relação à 0.1.2
 
 - **Quem caça o jogador** passa a ser decidido pela chamada do próprio motor `IsInCombat` (a mesma que o GreenTea usa), em vez de "arma desembainhada". Funciona com pessoas, criaturas e cavalos.
 - **Leitura do mundo em volta de um caçador parado** (`world`): altura do obstáculo à frente, se o chão desce adiante, e se vê o jogador. São os números que um salto vai precisar.
