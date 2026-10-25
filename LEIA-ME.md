@@ -1,60 +1,54 @@
-# Going Catch You — versão 0.2.1 (só lê)
+# Going Catch You — versão 0.3.0 (primeira que altera o jogo)
 
-Este passo **não altera nada no jogo**. Serve para responder, de uma vez, a tudo o que o mod precisa de saber antes de começar a mexer nos NPCs. Depois dele, o passo seguinte já é construir o mod.
+Até aqui o plugin só lia. A partir desta versão, **um caçador que fica parado diante de um obstáculo baixo é posto a saltar por cima dele**.
 
-> **Estado:** a base (carregar, verificar endereços, relógio por frame, ler NPCs) e o `IsInCombat` do motor foram testados em jogo. **Ainda não foram testados** a leitura do mundo (raycasts), a leitura do controlador e a sonda de NPCs em combate: na 0.2.0 a leitura do controlador falhou no primeiro NPC em combate (um vetor sem alinhamento a 16 bytes) e o plugin desligou-se. A 0.2.1 corrige isso. Se a compilação falhar, envia o `build.log`.
+> **Aviso:** é a primeira versão que mexe nos NPCs. Pode haver defeitos visíveis (a deslizar em pose de corrida, a atravessar a geometria, a ficar um pouco enterrado ou a flutuar). Nada disto foi testado em jogo. Se algo correr mal: `bJump=0` no INI volta ao modo só de leitura, e `bJumpDryRun=1` faz o plugin planear e escrever no log o que faria, sem fazer nada.
 
-## O que mudou na 0.2.1
+## A regra
 
-- **Velocidade do controlador:** o vetor passa a ser alinhado a 16 bytes dentro da própria função.
-- **Leituras isoladas:** a leitura do controlador, a leitura do mundo (`world`) e a sonda correm cada uma com a sua própria proteção. Se uma falhar, só se perde essa leitura; ao fim de 3 falhas essa funcionalidade desliga-se, e o log diz qual (`switched off`). O resto continua.
-- **Sonda:** pára de amostrar NPCs sem combate às 40 amostras (já chegam), o que tira o custo que causava os picos de 9 a 25 ms. Passou a aceitar também campos que só existem em NPCs em combate, e destaca os que contêm o handle do jogador.
+Um NPC é **caçador** quando o motor diz que está em combate e o seu alvo de combate é o jogador. O alvo está em `actor+0x90`, descoberto pela sonda: o handle do jogador aparecia ali em 338 de 410 amostras em combate, e nunca fora de combate.
 
-## O que a série 0.2 trouxe em relação à 0.1.2
+Um caçador salta quando, ao mesmo tempo:
+1. está **parado no chão** há mais de 1,2 s (a velocidade dele, calculada pelas posições, abaixo de 30 u/s) e não é arqueiro;
+2. o jogador está a **mais de 200 unidades**;
+3. à frente dele, na direção do jogador, há um **obstáculo baixo**: bloqueia o raio à altura dos pés (25) e não o do joelho (70), e está a menos de 120 unidades;
+4. o topo do obstáculo mede **até 70 unidades** (um metro, a altura da cintura);
+5. há **onde aterrar** depois dele: chão a mais ou menos a mesma altura, nada por cima e corredor livre à altura do arco, sem passar do jogador.
 
-- **Quem caça o jogador** passa a ser decidido pela chamada do próprio motor `IsInCombat` (a mesma que o GreenTea usa), em vez de "arma desembainhada". Funciona com pessoas, criaturas e cavalos.
-- **Leitura do mundo em volta de um caçador parado** (`world`): altura do obstáculo à frente, se o chão desce adiante, e se vê o jogador. São os números que um salto vai precisar.
-- **Leitura do controlador** do NPC (velocidade, tempo de queda, apoio), para comparar com a velocidade calculada pelas posições.
-- **Sonda comparativa**: compara NPCs em combate com NPCs que não estão, campo a campo, para descobrir onde o motor guarda o alvo de combate. Já não precisas de anotar IDs na consola.
-- **Custo**: o log diz quantos ticks por segundo recebe e quanto tempo demora cada amostra.
+## Como é o salto
 
-## 1. Compilar
+Não é um salto físico. A física do NPC é desligada, o controlador dele é movido a cada frame ao longo de um arco curto (meio segundo a pouco mais de um segundo) e a física volta onde ele aterra. São as três ferramentas que o projeto anterior provou em NPCs. Antes de começar é enviado o evento de animação `JumpDirectionalStart` e, no fim, `JumpLand`; se o jogo não os aceitar, o log diz e o NPC desliza em pose de corrida.
 
-Substitui a pasta `going-catch-you` do repositório pela deste ZIP (há ficheiros novos: `Havok.h` e `Havok.cpp`, e o `GoingCatchYou.vcxproj` mudou). O workflow não muda. Corre-o em **Actions** e descarrega o artefacto **resultado**.
+Fica tudo protegido: se o salto falhar duas vezes por um erro de memória, desliga-se sozinho para o resto da sessão.
 
-## 2. Instalar
+## 1. Compilar e instalar
 
-Copia `GoingCatchYou.dll` e `GoingCatchYou.ini` (de `dist\Data\SKSE\Plugins\`) para `Data\SKSE\Plugins\`. **Troca o INI antigo**: há chaves novas.
+Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (há ficheiros novos: `Jump.cpp/.h`, `Vault.cpp/.h`). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas) em `Data\SKSE\Plugins\`. A primeira linha do log tem de dizer `0.3.0-jump`.
 
-## 3. Testar (uns 10 minutos chegam)
+## 2. Testar
 
-1. Carrega um save e **fica perto de NPCs que não estão em combate** (uma cidade serve): a sonda precisa de pelo menos 5 desses.
-2. Entra em combate com **inimigos de vários tipos**: um bandido ou outro inimigo corpo a corpo, uma criatura (lobo, urso, aranha), e se puderes um arqueiro. A sonda precisa de pelo menos 5 amostras de NPCs em combate.
-3. **Foge para um sítio onde o inimigo não consiga chegar a pé**: em cima de uma rocha, de um muro ou de um telhado. É aí que aparecem as linhas `STOPPED` e `world`.
-4. Se o cavalo entrar na luta, melhor.
-5. Sai do jogo e envia `Documents\My Games\Skyrim\SKSE\GoingCatchYou.log`.
+Precisas de um inimigo **parado diante de um obstáculo baixo** com o jogador do outro lado. Uns sítios onde isto acontece: uma vedação ou muro à altura da cintura, uma rocha baixa, um degrau, um tronco caído. Põe-te a mais de 200 unidades (uns 3 metros), a ser visto pelo inimigo, e espera. Se ele der a volta pelo navmesh, repete noutro sítio: o salto só aparece quando ele fica mesmo preso.
 
-## 4. O que o log mostra
+Repara no que **vês**: saltou? Com animação de salto ou a deslizar? Atravessou o obstáculo? Ficou enterrado ou a flutuar? Foi atrás de ti depois?
+
+## 3. O que o log mostra
 
 | Linha | Significado |
 |---|---|
-| `heartbeat: the first tick arrived` / `observer: the first sample` | o relógio e o jogador estão prontos |
-| `observer: cell …` (a cada 5 s) | resumo: NPCs na célula, quantos em combate, se o jogador está em combate, ticks por segundo, e quanto tempo demora uma amostra |
-| `observer: + <id> (base <id>) appeared` | um NPC em combate passou a ser observado (`base` é o tipo de NPC; serve para saber se é lobo, bandido, etc.) |
-| `observer: track <id> …` | estado a cada 2 s: distância, altura relativa (`dz`), velocidade própria calculada pelas posições, velocidade do controlador (`ctrl`), tempo de queda, apoio, estado de ataque, flags `f1`/`f2` em hexadecimal |
-| `observer: STOPPED <id> …` | o próprio NPC parou, longe do jogador, e não é arqueiro |
-| `observer: world <id> …` | o que está à frente de um caçador parado: `[25:140(L1) 70:140(L1) 120:clear 170:clear]` é a distância a que cada raio (a 25, 70, 120 e 170 unidades de altura) bate e em que camada; `-> obstacle, top between 70 and 120` é a conclusão; `ground ahead [60:-5 140:-300]` é a altura do chão 60 e 140 unidades adiante em relação aos pés (negativo é uma queda); `line of sight` diz se ele vê o jogador |
-| `observer: probe: … fields that tell them apart` (a cada 30 s) | os campos que separam NPCs em combate dos que não estão. Se o valor for o handle do jogador, a linha diz-o |
-| `observer: - <id> left` | deixou de ser observado |
+| `jump: skip <id>: …` | tinha as condições de tempo e distância mas não saltou, e diz porquê (parede, alto demais, sem onde aterrar…) com os números do mundo logo a seguir |
+| `jump: plan <id>: …` | planeou um salto: distância ao obstáculo, altura, onde aterra, altura e duração do arco |
+| `jump: dry run, <id> stays where it is` | só no modo `bJumpDryRun=1` |
+| `jump: begin <id>; start event … -> accepted/not accepted` | começou, e se o jogo aceitou o evento de animação |
+| `jump: landed <id> after … s` | chegou ao fim do arco: passos dados, estado do controlador, apoio, evento final |
+| `jump: settled <id> (+0.3 s)` | 0,3 s depois: a que distância do ponto de aterragem ficou, e se a **física voltou a ligar** (`physics on`; `STILL OFF` seria um defeito) |
+| `jump: aftermath <id> (+2.5 s)` | 2,5 s depois: se ele foi atrás do jogador (mais perto, mais longe) |
+| `observer: STOPPED` / `track` | agora mostram também o alvo de combate (`target …`, e `(the player)` se for o jogador) |
+| `observer: cell …` | agora diz quantos dos NPCs em combate caçam o jogador |
+| `observer: world <id> …` | a linha de visão já está corrigida (antes dava sempre "bloqueada") |
 
-## 5. Limitações conhecidas
+## 4. Limitações
 
-- **`IsInCombat` diz que o NPC está em combate, não contra quem.** A sonda procura o campo do alvo de combate; se não achar, o passo seguinte decide com a distância e a visão.
-- **Só vê a célula onde o jogador está.** Num exterior, um inimigo na célula ao lado não aparece.
-- **Arqueiros ficam fora dos `STOPPED`**: os estados de ataque 7 a 15 são o ciclo do arco e aparecem como `(ranged)`.
-- **O tipo de NPC só aparece como `base <id>`**, não como nome. Se quiseres saber qual é, abre a consola e escreve o id.
-- **A velocidade e as flags de movimento que o motor dá não são fiáveis** nesta edição; por isso a velocidade é calculada pelas posições.
-
-## 6. Depois deste passo
-
-O passo seguinte já é construir: com a classificação, o obstáculo e o apoio lidos, os caçadores parados passam a saltar o que os trava.
+- Só salta obstáculos **baixos** (até 70 unidades). Paredes, desníveis grandes e trepar ficam para depois.
+- Só vê a célula onde o jogador está.
+- A sonda comparativa está desligada por defeito (`bProbe=0`), porque já cumpriu o que se queria.
+- O salto não roda o NPC: ele vai na direção do jogador com a orientação que já tinha.
