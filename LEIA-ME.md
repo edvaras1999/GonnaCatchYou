@@ -1,54 +1,49 @@
-# Going Catch You — versão 0.3.0 (primeira que altera o jogo)
+# Going Catch You — versão 0.3.1
 
-Até aqui o plugin só lia. A partir desta versão, **um caçador que fica parado diante de um obstáculo baixo é posto a saltar por cima dele**.
+Faz **caçadores saltarem obstáculos baixos** e traz **duas teclas de teste** para ver o salto sem esperar que um NPC fique preso.
 
-> **Aviso:** é a primeira versão que mexe nos NPCs. Pode haver defeitos visíveis (a deslizar em pose de corrida, a atravessar a geometria, a ficar um pouco enterrado ou a flutuar). Nada disto foi testado em jogo. Se algo correr mal: `bJump=0` no INI volta ao modo só de leitura, e `bJumpDryRun=1` faz o plugin planear e escrever no log o que faria, sem fazer nada.
+> **Aviso:** altera os NPCs. Pode haver defeitos visíveis (a deslizar em pose de corrida, a atravessar a geometria, enterrado ou a flutuar). **Nada disto foi testado em jogo**: o salto nunca chegou a correr na 0.3.0. Se algo correr mal: `bJump=0` no INI volta ao modo só de leitura; `bJumpDryRun=1` planeia e escreve no log, sem fazer nada; `bManualKeys=0` desliga as teclas.
 
-## A regra
+## As teclas de teste
 
-Um NPC é **caçador** quando o motor diz que está em combate e o seu alvo de combate é o jogador. O alvo está em `actor+0x90`, descoberto pela sonda: o handle do jogador aparecia ali em 338 de 410 amostras em combate, e nunca fora de combate.
+| Tecla | O que faz |
+|---|---|
+| **Seta para cima** | o **arco do plugin**: o NPC em combate mais perto de ti salta na tua direção. Se há um obstáculo baixo à frente (até 110 de altura, a menos de 200 unidades) salta por cima dele; senão faz um salto simples de 160 unidades |
+| **Seta para baixo** | a **animação de vault do FreeRun**: o mesmo NPC, se estiver a menos de 110 unidades de um obstáculo com 42 a 120 de altura, virado para ele |
 
-Um caçador salta quando, ao mesmo tempo:
-1. está **parado no chão** há mais de 1,2 s (a velocidade dele, calculada pelas posições, abaixo de 30 u/s) e não é arqueiro;
-2. o jogador está a **mais de 200 unidades**;
-3. à frente dele, na direção do jogador, há um **obstáculo baixo**: bloqueia o raio à altura dos pés (25) e não o do joelho (70), e está a menos de 120 unidades;
-4. o topo do obstáculo mede **até 70 unidades** (um metro, a altura da cintura);
-5. há **onde aterrar** depois dele: chão a mais ou menos a mesma altura, nada por cima e corredor livre à altura do arco, sem passar do jogador.
+As duas ignoram todas as condições do salto automático (ser caçador, estar parado, a distância ao jogador). Escolhem o NPC em combate mais perto de ti, dando preferência a quem te tem como alvo, até 2500 unidades. Só funcionam com a janela do jogo em primeiro plano, e **não as uses com a consola ou um menu abertos**.
 
-## Como é o salto
+Para o teste do arco basta um inimigo em combate perto de ti em terreno plano. Para o do FreeRun é preciso um inimigo **mesmo encostado a um obstáculo e virado para ele**; se não for o caso o log diz porquê. O FreeRun usa o patch de behavior que já tens instalado; se o grafo do NPC não reagir, o log diz `did not start` e que provavelmente o patch não está nesse grafo.
 
-Não é um salto físico. A física do NPC é desligada, o controlador dele é movido a cada frame ao longo de um arco curto (meio segundo a pouco mais de um segundo) e a física volta onde ele aterra. São as três ferramentas que o projeto anterior provou em NPCs. Antes de começar é enviado o evento de animação `JumpDirectionalStart` e, no fim, `JumpLand`; se o jogo não os aceitar, o log diz e o NPC desliza em pose de corrida.
+## O que mudou em relação à 0.3.0
 
-Fica tudo protegido: se o salto falhar duas vezes por um erro de memória, desliga-se sozinho para o resto da sessão.
+1. **Os raios ignoram personagens.** Antes, o corpo do jogador a 200 unidades aparecia como "parede".
+2. **O limite de altura subiu para 110** (era 70; os obstáculos reais do log tinham 87 e 110).
+3. **Gatilho novo, o desvio.** Além de "parado", um caçador que **anda mas com o rumo a mais de 60° da linha reta para o jogador, durante 2 s**, e tem um obstáculo saltável nessa linha, salta em vez de dar a volta. A linha `observer: DETOUR` regista cada desvio, mesmo quando não há obstáculo.
+
+## O salto automático, resumido
+
+Um **caçador** (em combate, com o jogador como alvo em `actor+0x90`) salta quando está parado há mais de 1,2 s **ou** em desvio há mais de 2 s, o jogador está a mais de 200 unidades, e há um obstáculo baixo a menos de 120 unidades à frente, com onde aterrar do outro lado. Não é um salto físico: a física do NPC é desligada, o controlador dele é movido num arco curto e a física volta onde ele aterra.
 
 ## 1. Compilar e instalar
 
-Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (há ficheiros novos: `Jump.cpp/.h`, `Vault.cpp/.h`). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas) em `Data\SKSE\Plugins\`. A primeira linha do log tem de dizer `0.3.0-jump`.
+Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (há ficheiros novos: `FreeRun.*` e `Manual.*`; o `.vcxproj` mudou). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas). A primeira linha do log tem de dizer `0.3.1-jump`.
 
-## 2. Testar
-
-Precisas de um inimigo **parado diante de um obstáculo baixo** com o jogador do outro lado. Uns sítios onde isto acontece: uma vedação ou muro à altura da cintura, uma rocha baixa, um degrau, um tronco caído. Põe-te a mais de 200 unidades (uns 3 metros), a ser visto pelo inimigo, e espera. Se ele der a volta pelo navmesh, repete noutro sítio: o salto só aparece quando ele fica mesmo preso.
-
-Repara no que **vês**: saltou? Com animação de salto ou a deslizar? Atravessou o obstáculo? Ficou enterrado ou a flutuar? Foi atrás de ti depois?
-
-## 3. O que o log mostra
+## 2. O que o log mostra
 
 | Linha | Significado |
 |---|---|
-| `jump: skip <id>: …` | tinha as condições de tempo e distância mas não saltou, e diz porquê (parede, alto demais, sem onde aterrar…) com os números do mundo logo a seguir |
-| `jump: plan <id>: …` | planeou um salto: distância ao obstáculo, altura, onde aterra, altura e duração do arco |
-| `jump: dry run, <id> stays where it is` | só no modo `bJumpDryRun=1` |
-| `jump: begin <id>; start event … -> accepted/not accepted` | começou, e se o jogo aceitou o evento de animação |
-| `jump: landed <id> after … s` | chegou ao fim do arco: passos dados, estado do controlador, apoio, evento final |
-| `jump: settled <id> (+0.3 s)` | 0,3 s depois: a que distância do ponto de aterragem ficou, e se a **física voltou a ligar** (`physics on`; `STILL OFF` seria um defeito) |
-| `jump: aftermath <id> (+2.5 s)` | 2,5 s depois: se ele foi atrás do jogador (mais perto, mais longe) |
-| `observer: STOPPED` / `track` | agora mostram também o alvo de combate (`target …`, e `(the player)` se for o jogador) |
-| `observer: cell …` | agora diz quantos dos NPCs em combate caçam o jogador |
-| `observer: world <id> …` | a linha de visão já está corrigida (antes dava sempre "bloqueada") |
+| `manual: the arc key was pressed` / `…FreeRun key…` | a tecla foi apanhada |
+| `manual: ARC on <id>: …` / `manual: FREERUN on <id>: …` | o que foi escolhido para o NPC e porquê; se não há NPC em combate ou o NPC está perto de mais, diz-o |
+| `jump: begin / landed / settled / aftermath` | o arco: se o jogo aceitou os eventos de animação, quando acabou, a que distância do ponto previsto ficou, se a **física voltou a ligar** (`STILL OFF` seria um defeito), e se ele foi atrás de ti |
+| `freerun: before … / begin / started / finished / aftermath` | o vault do FreeRun: o que o grafo dizia antes, se aceitou o evento, se arrancou (`SkyParkourOngoing`), quanto se moveu |
+| `observer: DETOUR <id>` | um caçador anda há 2 s sem ir direto ao jogador |
+| `jump: skip <id> (stopped/detour): …` | tinha o gatilho mas não saltou, e porquê, com os números do mundo |
+| `jump: plan <id> (stopped/detour): …` | planeou um salto automático |
 
-## 4. Limitações
+## 3. Limitações
 
-- Só salta obstáculos **baixos** (até 70 unidades). Paredes, desníveis grandes e trepar ficam para depois.
-- Só vê a célula onde o jogador está.
-- A sonda comparativa está desligada por defeito (`bProbe=0`), porque já cumpriu o que se queria.
+- O arco só salta obstáculos **baixos** (até 110). Paredes e trepar ficam para depois.
 - O salto não roda o NPC: ele vai na direção do jogador com a orientação que já tinha.
+- O vault do FreeRun é só o movimento por cima de um obstáculo, **sem** o que o projeto antigo fazia à volta (levar o NPC a um ponto de partida e corrigir a aterragem), porque foi aí que apareceram os defeitos.
+- Só vê a célula onde o jogador está.
