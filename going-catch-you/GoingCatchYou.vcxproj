@@ -140,6 +140,7 @@
     <ClCompile Include="Jump.cpp" />
     <ClCompile Include="FreeRun.cpp" />
     <ClCompile Include="Manual.cpp" />
+    <ClCompile Include="Explorer.cpp" />
     <ClCompile Include="Verify.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -152,6 +153,7 @@
     <ClInclude Include="Jump.h" />
     <ClInclude Include="FreeRun.h" />
     <ClInclude Include="Manual.h" />
+    <ClInclude Include="Explorer.h" />
     <ClInclude Include="Verify.h" />
     <ClInclude Include="Signatures.h" />
     <ClInclude Include="Log.h" />

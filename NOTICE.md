@@ -9,6 +9,7 @@ Parte do código vem de projetos anteriores, e por isso o repositório mantém a
 - **`Tick.cpp`**: o relógio por frame é um gancho no `Update` dos estados de câmara em primeira e terceira pessoa, com os mesmos endereços e a mesma técnica que o `Camera.cpp` do **FreeRun LE** (Mhacks79, AGPL-3.0), que por sua vez é um port do **SkyParkour NG** (Tsptds, AGPL-3.0).
 - **`Havok.h`, `Havok.cpp`**: os raycasts e shape casts contra o mundo físico, do projeto FreeRun NPC (que os trouxe do FreeClimb LE), sem alterações de lógica.
 - **`FreeRun.cpp`**: o protocolo de eventos e variáveis do grafo (`SkyParkour`, `SkyParkourLedge`, `SkyParkourOngoing`, `bAnimationDriven`) é o do patch de behavior do **FreeRun LE** (Mhacks79, AGPL-3.0), tal como o projeto FreeRun NPC o usou. Não precisa da DLL do FreeRun, só do patch de behavior; sem ele, o log diz que o grafo não reagiu.
+- **`Explorer.*`**: escrito de raiz. Usa o RTTI do executável do jogo (vtable, localizador, descritor de tipo) para nomear objetos; a análise estática do `TESV.exe` 1.9.32.0.8 que o justifica foi feita sobre a cópia do utilizador.
 - **`Jump.*`, `Vault.*`, `Manual.*`**: escritos de raiz para este projeto, sobre as ferramentas de movimento que o projeto FreeRun NPC provou em NPCs.
 - **`Observer.cpp`, `Settings.*`, `main.cpp`**: escritos de raiz para este projeto.
 

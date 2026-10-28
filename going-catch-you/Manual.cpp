@@ -8,6 +8,7 @@ namespace
 	DWORD			s_pendingMs = 0;
 	bool			s_prevArc = false;
 	bool			s_prevFree = false;
+	bool			s_prevDump = false;
 
 	bool KeyDown(int vk)
 	{
@@ -29,7 +30,7 @@ namespace Manual
 {
 	void OnTick(DWORD now)
 	{
-		if(!Settings::manualKeys) return;
+		if(!Settings::manualKeys && !Settings::explore) return;
 
 		// A request nobody picked up (the sample could not run) does not stay
 		// around forcing a sample every frame.
@@ -41,29 +42,44 @@ namespace Manual
 
 		if(!GameIsForeground())
 		{
-			s_prevArc = s_prevFree = false;
+			s_prevArc = s_prevFree = s_prevDump = false;
 			return;
 		}
 
-		const bool arc = KeyDown(Settings::keyArc);
-		const bool free = KeyDown(Settings::keyFreeRun);
-
 		// A request is made once per press, not once per frame the key is down.
-		if(arc && !s_prevArc)
+		if(Settings::manualKeys)
 		{
-			s_pending = kArc;
-			s_pendingMs = now;
-			_MESSAGE("manual: the arc key was pressed");
-		}
-		else if(free && !s_prevFree)
-		{
-			s_pending = kFreeRun;
-			s_pendingMs = now;
-			_MESSAGE("manual: the FreeRun key was pressed");
+			const bool arc = KeyDown(Settings::keyArc);
+			const bool free = KeyDown(Settings::keyFreeRun);
+
+			if(arc && !s_prevArc)
+			{
+				s_pending = kArc;
+				s_pendingMs = now;
+				_MESSAGE("manual: the arc key was pressed");
+			}
+			else if(free && !s_prevFree)
+			{
+				s_pending = kFreeRun;
+				s_pendingMs = now;
+				_MESSAGE("manual: the FreeRun key was pressed");
+			}
+
+			s_prevArc = arc;
+			s_prevFree = free;
 		}
 
-		s_prevArc = arc;
-		s_prevFree = free;
+		if(Settings::explore)
+		{
+			const bool dump = KeyDown(Settings::keyDump) && (!Settings::dumpNeedsShift || KeyDown(VK_SHIFT));
+			if(dump && !s_prevDump)
+			{
+				s_pending = kDump;
+				s_pendingMs = now;
+				_MESSAGE("manual: the dump key was pressed");
+			}
+			s_prevDump = dump;
+		}
 	}
 
 	Request Pending()	{ return s_pending; }

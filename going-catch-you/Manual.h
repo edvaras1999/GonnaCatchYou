@@ -11,7 +11,8 @@
 
 namespace Manual
 {
-	enum Request { kNone = 0, kArc = 1, kFreeRun = 2 };
+	// kDump is the explorer's: Shift+Insert writes the full state of every hunter to the log.
+	enum Request { kNone = 0, kArc = 1, kFreeRun = 2, kDump = 3 };
 
 	void OnTick(DWORD now);
 

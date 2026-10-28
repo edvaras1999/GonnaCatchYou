@@ -35,6 +35,12 @@ namespace Settings
 	extern int		keyArc;				// iKeyHopArc          virtual-key code: the plugin's own hop
 	extern int		keyFreeRun;			// iKeyHopFreeRun      virtual-key code: FreeRun's vault animation
 	extern float	manualRange;		// fManualRange        the test keys act on the NPC in combat nearest the player, within this
+	extern bool		explore;			// bExplore           the explorer: names objects, looks for paths, correlates fields
+	extern UInt32	exploreMs;			// iExploreMs         how often each hunter is explored
+	extern UInt32	exploreMaxObjects;	// iExploreMaxObjects objects looked at in one exploration, at most
+	extern UInt32	exploreDepth;		// iExploreDepth      how many pointers deep
+	extern int		keyDump;			// iKeyDump           virtual-key code: dump every hunter now
+	extern bool		dumpNeedsShift;		// bDumpNeedsShift    the dump key has to be pressed with Shift
 	extern UInt32	keepMs;				// iKeepMs         how long an NPC that stops qualifying is still kept (hides flicker)
 	extern bool		probe;				// bProbe          compare NPCs in combat with NPCs not in combat, field by field
 	extern UInt32	probeMs;			// iProbeMs        how often

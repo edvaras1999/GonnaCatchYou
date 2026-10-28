@@ -1,49 +1,46 @@
-# Going Catch You — versão 0.3.1
+# Going Catch You — versão 0.4.0 (só lê, com explorador)
 
-Faz **caçadores saltarem obstáculos baixos** e traz **duas teclas de teste** para ver o salto sem esperar que um NPC fique preso.
+Esta versão **não altera nada no jogo**: o salto e as teclas de teste vêm desligados. Serve para descobrir, numa só ida ao jogo, o que falta para o mod usar o **caminho que a IA do jogo calcula para cada NPC** (o que o FluidMotion faz na SE) e perceber **porque os NPCs ficam parados a encarar-te**.
 
-> **Aviso:** altera os NPCs. Pode haver defeitos visíveis (a deslizar em pose de corrida, a atravessar a geometria, enterrado ou a flutuar). **Nada disto foi testado em jogo**: o salto nunca chegou a correr na 0.3.0. Se algo correr mal: `bJump=0` no INI volta ao modo só de leitura; `bJumpDryRun=1` planeia e escreve no log, sem fazer nada; `bManualKeys=0` desliga as teclas.
+## O que descobrimos antes de escrever isto
 
-## As teclas de teste
+O `TESV.exe` que enviaste é exatamente o que o plugin já usa, e tem RTTI completo (6224 classes). Por isso o plugin consegue dar **nome** a qualquer objeto na memória a partir da sua vtable. A IA de combate da LE tem classes para tudo o que queremos: `CombatPath`, `CombatPathDestination`, `CombatPathingRequestStandard`, uma família de políticas de objetivo (`FindTargetLocation`, `FindAttackLocation`, `Flank`, `Search`, `SearchWander`, `Retreat`, `ReturnToCombatArea`), `CombatTargetSelector`, `CombatApproachTargetSpeedController` e `CombatAreaHoldPosition`. O andar dos NPCs vive no `MovementControllerNPC` (não há na LE o agente de seguir caminhos da SE, por isso os offsets do FluidMotion não servem).
 
-| Tecla | O que faz |
-|---|---|
-| **Seta para cima** | o **arco do plugin**: o NPC em combate mais perto de ti salta na tua direção. Se há um obstáculo baixo à frente (até 110 de altura, a menos de 200 unidades) salta por cima dele; senão faz um salto simples de 160 unidades |
-| **Seta para baixo** | a **animação de vault do FreeRun**: o mesmo NPC, se estiver a menos de 110 unidades de um obstáculo com 42 a 120 de altura, virado para ele |
+## O que o explorador faz
 
-As duas ignoram todas as condições do salto automático (ser caçador, estar parado, a distância ao jogador). Escolhem o NPC em combate mais perto de ti, dando preferência a quem te tem como alvo, até 2500 unidades. Só funcionam com a janela do jogo em primeiro plano, e **não as uses com a consola ou um menu abertos**.
+1. **Mapa de objetos nomeados.** Para cada caçador (e para uns 40 NPCs sem combate, para comparar) percorre ator → processos → objetos apontados, até 5 níveis, e dá nome a cada um. As linhas `explore: new in a hunter: <caminho> <classe>` mostram o que um caçador tem.
+2. **Procura de caminhos.** Procura sequências de posições (x, y, z) com ar de percurso, com qualquer espaçamento entre nós, e diz onde estão, quantos nós têm e a que distância ficam do NPC e do jogador. Um percurso que acaba perto de ti é um caminho completo; um que acaba longe é um caminho que não chega.
+3. **Correlação de campos.** Regista que campos dos objetos de movimento e combate mudam quando o NPC anda, para, se aproxima ou se afasta, e aponta os que separam os casos.
+4. **Resumo a cada 30 s** (`explore: summary`), com o que só os caçadores têm, onde há sequências de posições e que campos separam andar de parar.
+5. **Despejo:** **Shift+Insert** escreve no log, nesse momento, todos os objetos de cada caçador perto (até 4) e do jogador, com os primeiros 16 valores de cada objeto e os nós dos caminhos encontrados. Usa-o quando vires um NPC a dar a volta ou parado a encarar-te.
 
-Para o teste do arco basta um inimigo em combate perto de ti em terreno plano. Para o do FreeRun é preciso um inimigo **mesmo encostado a um obstáculo e virado para ele**; se não for o caso o log diz porquê. O FreeRun usa o patch de behavior que já tens instalado; se o grafo do NPC não reagir, o log diz `did not start` e que provavelmente o patch não está nesse grafo.
-
-## O que mudou em relação à 0.3.0
-
-1. **Os raios ignoram personagens.** Antes, o corpo do jogador a 200 unidades aparecia como "parede".
-2. **O limite de altura subiu para 110** (era 70; os obstáculos reais do log tinham 87 e 110).
-3. **Gatilho novo, o desvio.** Além de "parado", um caçador que **anda mas com o rumo a mais de 60° da linha reta para o jogador, durante 2 s**, e tem um obstáculo saltável nessa linha, salta em vez de dar a volta. A linha `observer: DETOUR` regista cada desvio, mesmo quando não há obstáculo.
-
-## O salto automático, resumido
-
-Um **caçador** (em combate, com o jogador como alvo em `actor+0x90`) salta quando está parado há mais de 1,2 s **ou** em desvio há mais de 2 s, o jogador está a mais de 200 unidades, e há um obstáculo baixo a menos de 120 unidades à frente, com onde aterrar do outro lado. Não é um salto físico: a física do NPC é desligada, o controlador dele é movido num arco curto e a física volta onde ele aterra.
+O explorador foi testado aqui contra a imagem real do `TESV.exe` (nomes das vtables, procura de um caminho de 6 nós inventado, correlação de um campo de estado). Isso valida a lógica; não valida o que acontece dentro do jogo.
 
 ## 1. Compilar e instalar
 
-Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (há ficheiros novos: `FreeRun.*` e `Manual.*`; o `.vcxproj` mudou). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas). A primeira linha do log tem de dizer `0.3.1-jump`.
+Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (ficheiro novo: `Explorer.cpp/.h`; o `.vcxproj` mudou). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas). A primeira linha do log tem de dizer `0.4.0-explore`.
 
-## 2. O que o log mostra
+## 2. Testar (uns 15 minutos)
+
+1. Carrega um save e **fica perto de NPCs sem combate** (uma cidade): o explorador precisa de uns 40 para comparar.
+2. Entra em combate com **vários inimigos**, em sítios onde dêem voltas: terreno com muros, rochas, desníveis.
+3. **Põe-te num sítio onde não te alcancem** (em cima de uma rocha ou de um muro) e espera que alguns fiquem parados a encarar-te.
+4. Nos momentos interessantes (um a dar a volta, um parado a encarar-te, um que passa para o outro lado), carrega **Shift+Insert** uma vez. Três ou quatro vezes chegam.
+5. Sai do jogo e envia o log.
+
+## 3. Linhas do log
 
 | Linha | Significado |
 |---|---|
-| `manual: the arc key was pressed` / `…FreeRun key…` | a tecla foi apanhada |
-| `manual: ARC on <id>: …` / `manual: FREERUN on <id>: …` | o que foi escolhido para o NPC e porquê; se não há NPC em combate ou o NPC está perto de mais, diz-o |
-| `jump: begin / landed / settled / aftermath` | o arco: se o jogo aceitou os eventos de animação, quando acabou, a que distância do ponto previsto ficou, se a **física voltou a ligar** (`STILL OFF` seria um defeito), e se ele foi atrás de ti |
-| `freerun: before … / begin / started / finished / aftermath` | o vault do FreeRun: o que o grafo dizia antes, se aceitou o evento, se arrancou (`SkyParkourOngoing`), quanto se moveu |
-| `observer: DETOUR <id>` | um caçador anda há 2 s sem ir direto ao jogador |
-| `jump: skip <id> (stopped/detour): …` | tinha o gatilho mas não saltou, e porquê, com os números do mundo |
-| `jump: plan <id> (stopped/detour): …` | planeou um salto automático |
+| `explore: new in a hunter: <caminho> <classe>` | um objeto que um caçador tem, e onde está (`a` é o ator, `a>88` o processo, `a>88>4` o processo médio, `a>88>8` o alto). Só as primeiras 180 |
+| `explore: path? <id> <onde> +<offset> stride <n>` | uma sequência que pode ser um caminho: quantos nós, o comprimento, e as distâncias do primeiro e do último ao NPC e ao jogador |
+| `explore: summary` | a cada 30 s: objetos que só os caçadores têm; sítios onde há sequências de posições; campos que separam andar de parar e aproximar-se de afastar-se |
+| `dump: …` | o despejo do Shift+Insert, objeto a objeto |
+| `observer: …` | tudo o que já havia (`track`, `STOPPED`, `DETOUR`, `world`) |
 
-## 3. Limitações
+## 4. Limitações
 
-- O arco só salta obstáculos **baixos** (até 110). Paredes e trepar ficam para depois.
-- O salto não roda o NPC: ele vai na direção do jogador com a orientação que já tinha.
-- O vault do FreeRun é só o movimento por cima de um obstáculo, **sem** o que o projeto antigo fazia à volta (levar o NPC a um ponto de partida e corrigir a aterragem), porque foi aí que apareceram os defeitos.
+- Lê memória por ponteiros, protegida por verificações e por um tratador de exceções; se falhar 3 vezes o explorador desliga-se e o log diz.
 - Só vê a célula onde o jogador está.
+- A procura de caminhos é heurística: pode dar falsos positivos (matrizes, vetores) e perder caminhos guardados de outra forma. O despejo e a correlação ajudam a decidir.
+- O salto e as teclas de teste continuam no código, desligados (`bJump=0`, `bManualKeys=0`); a sonda antiga também (`bProbe=0`).

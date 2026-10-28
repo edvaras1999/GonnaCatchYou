@@ -47,6 +47,7 @@
 #include "Jump.h"
 #include "FreeRun.h"
 #include "Manual.h"
+#include "Explorer.h"
 #include "Log.h"
 
 #include "skse/GameForms.h"
@@ -99,6 +100,7 @@ namespace
 		DWORD	stopSinceMs;		// since when it has been standing still on the ground (any distance)
 		DWORD	lastJumpTryMs;
 		DWORD	lastSkipLogMs;
+		DWORD	lastExploreMs;
 		DWORD	detourSinceMs;		// since when it has been moving, but not toward the player
 		float	headingCos;			// smoothed cosine between its direction of travel and the line to the player
 		bool	headingPrimed;
@@ -438,6 +440,58 @@ namespace
 		}
 	}
 
+	// ------------------------------------------------------------ the explorer
+	//
+	// Looks at how a hunter's movement and combat AI are laid out, behind its own
+	// handler, so a fault in it costs one look and not the sample.
+
+	bool	s_exploreOk = true;
+	UInt32	s_exploreFaults = 0;
+
+	bool GuardedExplore(Actor * npc, UInt32 id, const Engine::Chain & chain, int role, const NiPoint3 & np, const NiPoint3 & pp,
+						int motion, int approach, bool detailed)
+	{
+		__try
+		{
+			Explorer::Explore(npc, id, chain, role, np, pp, motion, approach, detailed);
+			return true;
+		}
+		__except(EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+	}
+
+	// Shift+Insert: every hunter near, and the player, written out in full.
+	__declspec(noinline) void DoDump(Actor * player, const NiPoint3 & pp, Actor ** list, const UInt32 * ids, UInt32 n)
+	{
+		_MESSAGE("dump: ---------- requested: %u hunter(s) ----------", (unsigned int)n);
+		for(UInt32 i = 0; i < n; ++i)
+		{
+			Engine::Chain chain;
+			if(!Engine::ActorChain(list[i], chain)) continue;
+			Explorer::Explore(list[i], ids[i], chain, Explorer::kHunter, Engine::Position(list[i]), pp,
+							  Explorer::kMotionUnknown, Explorer::kApproachUnknown, true);
+		}
+		Engine::Chain pc;
+		if(Engine::ActorChain(player, pc))
+			Explorer::Explore(player, 0x14, pc, Explorer::kPlayer, pp, pp, Explorer::kMotionUnknown, Explorer::kApproachUnknown, true);
+		_MESSAGE("dump: ---------- end ----------");
+	}
+
+	bool GuardedDump(Actor * player, const NiPoint3 & pp, Actor ** list, const UInt32 * ids, UInt32 n)
+	{
+		__try
+		{
+			DoDump(player, pp, list, ids, n);
+			return true;
+		}
+		__except(EXCEPTION_EXECUTE_HANDLER)
+		{
+			return false;
+		}
+	}
+
 	// ----------------------------------------------------------- the vault
 	//
 	// A hunter that has stood still on the ground for iJumpStopMs, with the
@@ -609,9 +663,14 @@ namespace
 		NiPoint3 bestPos;
 		float bestDist = 0.0f;
 		bool bestHunter = false;
+		Actor * hunterList[4];
+		UInt32 hunterIds[4];
+		float hunterDist[4];
+		UInt32 hunterCount = 0;
 		UInt32 casts = 0;
-		const bool probeDue = Settings::probe && s_probeIdleSamples < kIdleProbeCap &&
-							  (now - s_lastIdleProbeMs >= Settings::probeMs);
+		const bool probeDue = (now - s_lastIdleProbeMs >= Settings::probeMs) &&
+							  ((Settings::probe && s_probeIdleSamples < kIdleProbeCap) ||
+							   (Settings::explore && Explorer::Samples(Explorer::kIdle) < 40));
 		Actor * idle[kMaxIdleCandidates];
 		UInt32 idleCount = 0;
 
@@ -648,6 +707,19 @@ namespace
 			const bool hunter = combat && Engine::CombatTargetHandle(npc) == kPlayerHandle;
 			if(combat) ++inCombatCount;
 			if(hunter) ++huntingCount;
+			if(hunter)
+			{
+				// the four nearest, for the dump
+				UInt32 slot = hunterCount < 4 ? hunterCount : 4;
+				if(hunterCount < 4) ++hunterCount;
+				else
+				{
+					UInt32 worst = 0;
+					for(UInt32 k = 1; k < 4; ++k) if(hunterDist[k] > hunterDist[worst]) worst = k;
+					if(dist < hunterDist[worst]) slot = worst;
+				}
+				if(slot < 4) { hunterList[slot] = npc; hunterIds[slot] = ref->formID; hunterDist[slot] = dist; }
+			}
 			if(combat && dist <= Settings::manualRange &&
 			   (!bestNpc || (hunter && !bestHunter) || (hunter == bestHunter && dist < bestDist)))
 			{
@@ -853,6 +925,19 @@ namespace
 						 drawn ? "drawn" : "away", t->stalled ? " STOPPED" : "");
 			}
 
+			// ---------------------------------------------------- explore
+			if(Settings::explore && s_exploreOk && hunter && now - t->lastExploreMs >= Settings::exploreMs)
+			{
+				t->lastExploreMs = now;
+				const int motion = !t->primed ? Explorer::kMotionUnknown :
+					(t->vel > 100.0f ? Explorer::kMoving : (t->vel < Settings::stoppedSpeed ? Explorer::kStopped : Explorer::kMotionUnknown));
+				const int approach = !t->primed ? Explorer::kApproachUnknown :
+					(t->closing > 60.0f ? Explorer::kApproaching :
+					 ((t->vel > 100.0f && t->closing < 0.0f) ? Explorer::kGoingElsewhere : Explorer::kApproachUnknown));
+				if(!GuardedExplore(npc, id, chain, Explorer::kHunter, np, pp, motion, approach, false))
+					NoteFault("the explorer", s_exploreFaults, s_exploreOk);
+			}
+
 			// ------------------------------------------------------ probe
 			if(Settings::probe && s_probeOk && combat && now - t->lastProbeMs >= Settings::probeMs)
 			{
@@ -867,7 +952,12 @@ namespace
 		{
 			const Manual::Request request = Manual::Pending();
 			Manual::Clear();
-			if(s_manualOk && !GuardedManual(request, bestNpc, bestId, bestPos, pp))
+			if(request == Manual::kDump)
+			{
+				if(!GuardedDump(player, pp, hunterList, hunterIds, hunterCount))
+					NoteFault("the dump", s_exploreFaults, s_exploreOk);
+			}
+			else if(s_manualOk && !GuardedManual(request, bestNpc, bestId, bestPos, pp))
 				NoteFault("a manual move", s_manualFaults, s_manualOk);
 		}
 
@@ -880,8 +970,15 @@ namespace
 			{
 				Actor * npc = idle[(s_idleCursor + k) % idleCount];
 				Engine::Chain chain;
-				if(s_probeOk && Engine::ActorChain(npc, chain) && !GuardedProbeNpc(npc, chain, false))
+				if(!Engine::ActorChain(npc, chain)) continue;
+
+				if(Settings::probe && s_probeOk && s_probeIdleSamples < kIdleProbeCap && !GuardedProbeNpc(npc, chain, false))
 					NoteFault("the probe", s_probeFaults, s_probeOk);
+
+				if(Settings::explore && s_exploreOk && Explorer::Samples(Explorer::kIdle) < 40 &&
+				   !GuardedExplore(npc, npc->formID, chain, Explorer::kIdle, Engine::Position(npc), pp,
+								   Explorer::kMotionUnknown, Explorer::kApproachUnknown, false))
+					NoteFault("the explorer", s_exploreFaults, s_exploreOk);
 			}
 			s_idleCursor += kIdleProbesPerRound;
 		}
@@ -918,9 +1015,13 @@ namespace
 			s_perfSumUs = s_perfMaxUs = 0.0;
 		}
 
-		if(Settings::probe && now - s_lastProbeSummaryMs >= Settings::summaryMs)
+		if((Settings::probe || Settings::explore) && now - s_lastProbeSummaryMs >= Settings::summaryMs)
 		{
-			if(s_lastProbeSummaryMs) ProbeSummary((UInt32)player);
+			if(s_lastProbeSummaryMs)
+			{
+				if(Settings::probe) ProbeSummary((UInt32)player);
+				if(Settings::explore && s_exploreOk) Explorer::Summary((UInt32)player);
+			}
 			s_lastProbeSummaryMs = now;
 		}
 	}

@@ -21,7 +21,7 @@ namespace Settings
 	UInt32	castMs				= 1000;
 	float	castDistance		= 300.0f;
 	UInt32	summaryMs			= 30000;
-	bool	jump				= true;
+	bool	jump				= false;
 	bool	jumpDryRun			= false;
 	float	jumpMaxObstacle		= 110.0f;
 	float	jumpTriggerDistance	= 120.0f;
@@ -34,10 +34,16 @@ namespace Settings
 	UInt32	detourMs			= 2000;
 	float	detourMinSpeed		= 90.0f;
 	float	detourAngle			= 60.0f;
-	bool	manualKeys			= true;
+	bool	manualKeys			= false;
 	int		keyArc				= 0x26;		// VK_UP
 	int		keyFreeRun			= 0x28;		// VK_DOWN
 	float	manualRange			= 2500.0f;
+	bool	explore				= true;
+	UInt32	exploreMs			= 3000;
+	UInt32	exploreMaxObjects	= 300;
+	UInt32	exploreDepth		= 5;
+	int		keyDump				= 0x2D;		// VK_INSERT
+	bool	dumpNeedsShift		= true;
 	UInt32	keepMs				= 5000;
 	bool	probe				= false;
 	UInt32	probeMs				= 4000;
@@ -89,8 +95,14 @@ namespace Settings
 		v = ReadInt("iStallMs", 2000);		stallMs		= v < 250  ? 250  : (UInt32)v;
 		probe				= ReadInt("bProbe", 0) != 0;
 		includeDrawn		= ReadInt("bIncludeWeaponDrawn", 0) != 0;
-		jump				= ReadInt("bJump", 1) != 0;
-		manualKeys			= ReadInt("bManualKeys", 1) != 0;
+		jump				= ReadInt("bJump", 0) != 0;
+		manualKeys			= ReadInt("bManualKeys", 0) != 0;
+		explore				= ReadInt("bExplore", 1) != 0;
+		keyDump				= ReadInt("iKeyDump", 0x2D);
+		dumpNeedsShift		= ReadInt("bDumpNeedsShift", 1) != 0;
+		v = ReadInt("iExploreMs", 3000);		exploreMs		= v < 500  ? 500  : (UInt32)v;
+		v = ReadInt("iExploreMaxObjects", 300);	exploreMaxObjects = v < 20 ? 20 : (v > 600 ? 600 : (UInt32)v);
+		v = ReadInt("iExploreDepth", 5);		exploreDepth	= v < 2 ? 2 : (v > 7 ? 7 : (UInt32)v);
 		keyArc				= ReadInt("iKeyHopArc", 0x26);
 		keyFreeRun			= ReadInt("iKeyHopFreeRun", 0x28);
 		manualRange			= ReadFloat("fManualRange", 2500.0f);
@@ -124,6 +136,9 @@ namespace Settings
 		stallMinDistance	= ReadFloat("fStallMinDistance", 400.0f);
 		if(radius < 200.0f) radius = 200.0f;
 
+		_MESSAGE("settings: explorer %d (every %u ms, %u objects, %u deep), dump key %d%s",
+				 explore ? 1 : 0, (unsigned int)exploreMs, (unsigned int)exploreMaxObjects, (unsigned int)exploreDepth,
+				 keyDump, dumpNeedsShift ? " + Shift" : "");
 		_MESSAGE("settings: test keys %d (arc %d, FreeRun %d), detour trigger: moving over %.0f u/s and over %.0f degrees off the line for %u ms",
 				 manualKeys ? 1 : 0, keyArc, keyFreeRun, detourMinSpeed, detourAngle, (unsigned int)detourMs);
 		_MESSAGE("settings: jump %d (dry run %d), obstacles up to %.0f within %.0f units, not within %.0f of the player, "
