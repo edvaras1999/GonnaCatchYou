@@ -393,4 +393,19 @@ namespace Engine
 		CALL_MEMBER_FN(&n, Release)();
 		return ok;
 	}
+
+	// The controller's state and its fall bookkeeping, written. FluidMotion does
+	// the same every frame of a driven flight: the state says "in the air" so the
+	// animation graph plays the fall pose, and the fall start height is kept at
+	// the current height so that landing is not read as a fall from where the
+	// flight began (that is what fall damage is computed from). The height is in
+	// game units, the same as the actor's position (the FreeRun project compares
+	// the two directly).
+	inline void ControllerSetState(void * ctrl, UInt32 state)	{ *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState) = state; }
+
+	inline void ControllerSetFall(void * ctrl, float startHeight)
+	{
+		*(float *)((UInt8 *)ctrl + Controller::kFallStartHeight) = startHeight;
+		*(float *)((UInt8 *)ctrl + Controller::kFallTime) = 0.0f;
+	}
 }

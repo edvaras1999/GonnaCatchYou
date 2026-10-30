@@ -492,31 +492,43 @@ namespace
 		}
 	}
 
-	// ----------------------------------------------------------- the vault
+	// ------------------------------------------------------------- the leap
 	//
-	// A hunter that has stood still on the ground for iJumpStopMs, with the
-	// player at least fJumpMinPlayerDistance away, gets a look at what is in
-	// front of it. If that is something low it can be hopped, the hop is
-	// planned and handed to Jump.cpp. Every refusal says why, at most once
-	// every few seconds per NPC.
+	// A hunter that is not getting any closer - it has stood still for
+	// iLeapStallMs, or it has been going the wrong way for iDetourMs - is sent on
+	// a leap toward the player, if a safe landing near him can be found. Every
+	// refusal says why, at most once every few seconds per NPC.
 
 	bool	s_jumpOk = true;
 	UInt32	s_jumpFaults = 0;
 
-	__declspec(noinline) void TryVault(Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp, Track * t, DWORD now, const char * reason)
+	__declspec(noinline) void TryLeap(Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp, Track * t, DWORD now,
+									  const char * reason, bool needSight, const NiPoint3 * crowd, UInt32 crowdCount)
 	{
 		Vault::Scene scene;
 		if(!Vault::Scan(npc, np, pp, scene)) return;
 
+		// A hunter that stands still and cannot see the player is probably waiting
+		// for a reason; one that can see him and does not come is the one to help.
+		if(needSight && !scene.sightVisible)
+		{
+			if(now - t->lastSkipLogMs >= 6000)
+			{
+				t->lastSkipLogMs = now;
+				_MESSAGE("jump: skip %08X (%s): no line of sight to the player (blocked at %.0f of %.0f)",
+						 (unsigned int)id, reason, scene.sightDist, scene.sightLen);
+			}
+			return;
+		}
+
 		Jump::Plan plan;
-		char why[200];
-		if(!Vault::PlanLowObstacle(npc, np, pp, scene, Settings::jumpTriggerDistance, Settings::jumpMaxObstacle, plan, why, sizeof(why)))
+		char why[360];
+		if(!Vault::PlanLeap(npc, np, pp, crowd, crowdCount, plan, why, sizeof(why)))
 		{
 			if(now - t->lastSkipLogMs >= 6000)
 			{
 				t->lastSkipLogMs = now;
 				_MESSAGE("jump: skip %08X (%s): %s", (unsigned int)id, reason, why);
-				Vault::LogScene(id, scene);		// the numbers behind the refusal, once
 			}
 			return;
 		}
@@ -534,11 +546,12 @@ namespace
 			_MESSAGE("jump: %08X could not begin (busy or unavailable)", (unsigned int)id);
 	}
 
-	bool GuardedTryVault(Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp, Track * t, DWORD now, const char * reason)
+	bool GuardedTryLeap(Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp, Track * t, DWORD now,
+						const char * reason, bool needSight, const NiPoint3 * crowd, UInt32 crowdCount)
 	{
 		__try
 		{
-			TryVault(npc, id, np, pp, t, now, reason);
+			TryLeap(npc, id, np, pp, t, now, reason, needSight, crowd, crowdCount);
 			return true;
 		}
 		__except(EXCEPTION_EXECUTE_HANDLER)
@@ -556,7 +569,8 @@ namespace
 	bool	s_manualOk = true;
 	UInt32	s_manualFaults = 0;
 
-	__declspec(noinline) void DoManual(Manual::Request request, Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp)
+	__declspec(noinline) void DoManual(Manual::Request request, Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp,
+									   const NiPoint3 * crowd, UInt32 crowdCount)
 	{
 		if(!npc)
 		{
@@ -581,18 +595,14 @@ namespace
 		if(request == Manual::kArc)
 		{
 			Jump::Plan plan;
-			if(!Vault::PlanLowObstacle(npc, np, pp, scene, 200.0f, 110.0f, plan, why, sizeof(why)))
+			if(!Vault::PlanLeap(npc, np, pp, crowd, crowdCount, plan, why, sizeof(why)))
 			{
-				_MESSAGE("manual: no obstacle hop for %08X (%s); trying a plain hop", (unsigned int)id, why);
-				if(!Vault::PlanPlainHop(npc, np, scene, plan, why, sizeof(why)))
-				{
-					_MESSAGE("manual: %08X: %s; nothing done", (unsigned int)id, why);
-					return;
-				}
+				_MESSAGE("manual: no safe leap for %08X: %s; nothing done", (unsigned int)id, why);
+				return;
 			}
-			_MESSAGE("manual: ARC on %08X: %s", (unsigned int)id, why);
+			_MESSAGE("manual: LEAP on %08X: %s", (unsigned int)id, why);
 			if(!Jump::Begin(npc, id, plan))
-				_MESSAGE("manual: %08X could not begin (busy or unavailable)", (unsigned int)id);
+				_MESSAGE("manual: %08X could not begin (busy, or not on the ground)", (unsigned int)id);
 		}
 		else
 		{
@@ -608,11 +618,12 @@ namespace
 		}
 	}
 
-	bool GuardedManual(Manual::Request request, Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp)
+	bool GuardedManual(Manual::Request request, Actor * npc, UInt32 id, const NiPoint3 & np, const NiPoint3 & pp,
+					   const NiPoint3 * crowd, UInt32 crowdCount)
 	{
 		__try
 		{
-			DoManual(request, npc, id, np, pp);
+			DoManual(request, npc, id, np, pp, crowd, crowdCount);
 			return true;
 		}
 		__except(EXCEPTION_EXECUTE_HANDLER)
@@ -656,6 +667,10 @@ namespace
 		const float inv = Engine::HavokScaleInverse();
 		UInt32 actors = 0, inRange = 0, watched = 0, inCombatCount = 0, huntingCount = 0;
 		UInt32 jumpTries = 0;
+
+		// Everyone alive and nearby, for the planner to keep a landing clear of.
+		NiPoint3 crowd[48];
+		UInt32 crowdCount = 0;
 
 		// For the test keys: the NPC in combat nearest the player, a hunter if there is one.
 		Actor * bestNpc = NULL;
@@ -701,6 +716,8 @@ namespace
 			Engine::Chain chain;
 			if(!Engine::ActorChain(npc, chain)) continue;
 			if(!Engine::ActorIsBuilt(npc)) continue;
+
+			if(crowdCount < 48 && dist < 1500.0f) crowd[crowdCount++] = np;
 
 			const bool drawn = Engine::WeaponState(npc) == Engine::kWeaponState_Drawn;
 			const bool combat = Engine::IsInCombat(npc);
@@ -861,7 +878,7 @@ namespace
 			if(detourNow) { if(!t->detourSinceMs) t->detourSinceMs = now; }
 			else { t->detourSinceMs = 0; t->detourLogged = false; }
 
-			const bool stopLong = t->stopSinceMs && now - t->stopSinceMs >= Settings::jumpStopMs;
+			const bool stopLong = t->stopSinceMs && now - t->stopSinceMs >= Settings::leapStallMs;
 			const bool detourLong = t->detourSinceMs && now - t->detourSinceMs >= Settings::detourMs;
 
 			if(detourLong && !t->detourLogged)
@@ -880,8 +897,9 @@ namespace
 			{
 				t->lastJumpTryMs = now;
 				++jumpTries;
-				if(!GuardedTryVault(npc, id, np, pp, t, now, stopLong ? "stopped" : "detour"))
-					NoteFault("the vault planner", s_jumpFaults, s_jumpOk);
+				if(!GuardedTryLeap(npc, id, np, pp, t, now, stopLong ? "standing" : "detour",
+								   stopLong && Settings::leapNeedSight, crowd, crowdCount))
+					NoteFault("the leap planner", s_jumpFaults, s_jumpOk);
 			}
 
 			// ----------------------------------------------------- world
@@ -957,7 +975,7 @@ namespace
 				if(!GuardedDump(player, pp, hunterList, hunterIds, hunterCount))
 					NoteFault("the dump", s_exploreFaults, s_exploreOk);
 			}
-			else if(s_manualOk && !GuardedManual(request, bestNpc, bestId, bestPos, pp))
+			else if(s_manualOk && !GuardedManual(request, bestNpc, bestId, bestPos, pp, crowd, crowdCount))
 				NoteFault("a manual move", s_manualFaults, s_manualOk);
 		}
 

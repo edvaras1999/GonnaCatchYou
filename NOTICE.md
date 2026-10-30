@@ -10,7 +10,7 @@ Parte do código vem de projetos anteriores, e por isso o repositório mantém a
 - **`Havok.h`, `Havok.cpp`**: os raycasts e shape casts contra o mundo físico, do projeto FreeRun NPC (que os trouxe do FreeClimb LE), sem alterações de lógica.
 - **`FreeRun.cpp`**: o protocolo de eventos e variáveis do grafo (`SkyParkour`, `SkyParkourLedge`, `SkyParkourOngoing`, `bAnimationDriven`) é o do patch de behavior do **FreeRun LE** (Mhacks79, AGPL-3.0), tal como o projeto FreeRun NPC o usou. Não precisa da DLL do FreeRun, só do patch de behavior; sem ele, o log diz que o grafo não reagiu.
 - **`Explorer.*`**: escrito de raiz. Usa o RTTI do executável do jogo (vtable, localizador, descritor de tipo) para nomear objetos; a análise estática do `TESV.exe` 1.9.32.0.8 que o justifica foi feita sobre a cópia do utilizador.
-- **`Jump.*`, `Vault.*`, `Manual.*`**: escritos de raiz para este projeto, sobre as ferramentas de movimento que o projeto FreeRun NPC provou em NPCs.
+- **`Jump.*`, `Vault.*`, `Manual.*`**: escritos de raiz para este projeto. O voo (posição, estado "no ar", velocidade e altura de início de queda a cada frame) segue o que o **FluidMotion** (megakuutti; fork de Tony Torres / tonycubed2, GPL-3.0) faz num voo conduzido, lido do seu código-fonte público; nenhum código dele foi copiado. As primitivas de escrita no controlador vêm do projeto FreeRun NPC.
 - **`Observer.cpp`, `Settings.*`, `main.cpp`**: escritos de raiz para este projeto.
 
 Como referência de comportamento (não como código), o projeto olha para o **FluidMotionNPC** (megakuutti, fork de Tony Torres / tonycubed2, GPL-3.0). Nada do código dele está neste passo. Qualquer parte que venha a ser portada nos passos seguintes mantém a licença GPL-3.0 e os créditos.

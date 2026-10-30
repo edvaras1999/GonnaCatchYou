@@ -1,46 +1,52 @@
-# Going Catch You — versão 0.4.0 (só lê, com explorador)
+# Going Catch You — versão 0.5.0 (a perseguição)
 
-Esta versão **não altera nada no jogo**: o salto e as teclas de teste vêm desligados. Serve para descobrir, numa só ida ao jogo, o que falta para o mod usar o **caminho que a IA do jogo calcula para cada NPC** (o que o FluidMotion faz na SE) e perceber **porque os NPCs ficam parados a encarar-te**.
+Um caçador que **não se aproxima de ti** passa a **saltar na tua direção**, em vez de ficar parado a encarar-te ou a dar a volta. **Esta versão altera os NPCs.**
 
-## O que descobrimos antes de escrever isto
+> **Aviso:** o salto nunca foi visto a funcionar bem (na 0.3.1 correu mal). Esta versão refaz a mecânica e acrescenta proteções, mas **não foi testada em jogo**. Se algo correr mal, `bJump=0` no INI volta ao modo só de leitura, `bJumpDryRun=1` planeia e escreve no log sem fazer nada, e `bManualKeys=0` desliga a tecla de teste.
 
-O `TESV.exe` que enviaste é exatamente o que o plugin já usa, e tem RTTI completo (6224 classes). Por isso o plugin consegue dar **nome** a qualquer objeto na memória a partir da sua vtable. A IA de combate da LE tem classes para tudo o que queremos: `CombatPath`, `CombatPathDestination`, `CombatPathingRequestStandard`, uma família de políticas de objetivo (`FindTargetLocation`, `FindAttackLocation`, `Flank`, `Search`, `SearchWander`, `Retreat`, `ReturnToCombatArea`), `CombatTargetSelector`, `CombatApproachTargetSpeedController` e `CombatAreaHoldPosition`. O andar dos NPCs vive no `MovementControllerNPC` (não há na LE o agente de seguir caminhos da SE, por isso os offsets do FluidMotion não servem).
+## O que mudou em relação à 0.3.1 e porquê
 
-## O que o explorador faz
+O que falhou na 0.3.1 foi o salto simples da tecla: aterrou praticamente sobre o jogador, o NPC foi empurrado através do chão e morreu. Também flutuava. Agora:
 
-1. **Mapa de objetos nomeados.** Para cada caçador (e para uns 40 NPCs sem combate, para comparar) percorre ator → processos → objetos apontados, até 5 níveis, e dá nome a cada um. As linhas `explore: new in a hunter: <caminho> <classe>` mostram o que um caçador tem.
-2. **Procura de caminhos.** Procura sequências de posições (x, y, z) com ar de percurso, com qualquer espaçamento entre nós, e diz onde estão, quantos nós têm e a que distância ficam do NPC e do jogador. Um percurso que acaba perto de ti é um caminho completo; um que acaba longe é um caminho que não chega.
-3. **Correlação de campos.** Regista que campos dos objetos de movimento e combate mudam quando o NPC anda, para, se aproxima ou se afasta, e aponta os que separam os casos.
-4. **Resumo a cada 30 s** (`explore: summary`), com o que só os caçadores têm, onde há sequências de posições e que campos separam andar de parar.
-5. **Despejo:** **Shift+Insert** escreve no log, nesse momento, todos os objetos de cada caçador perto (até 4) e do jogador, com os primeiros 16 valores de cada objeto e os nós dos caminhos encontrados. Usa-o quando vires um NPC a dar a volta ou parado a encarar-te.
+1. **Voo como o do FluidMotion.** A cada frame: o NPC é posto onde o arco diz, o controlador é marcado **"no ar"** (o jogo toca a pose de queda), recebe a **velocidade** do arco, e a **altura de início de queda** é mantida no ponto atual, para a aterragem **não dar dano de queda**. A física **não** é desligada.
+2. **Aterragem escolhida, nunca à sorte.** O planeador testa pontos entre o NPC e ti e só aceita um com **chão sólido** (estático, terreno), **plano**, **ao nível do jogador**, ao alcance (sobe até 180, desce até 420), **sem nada por cima**, **ninguém lá**, a **90 ou mais do jogador**, e o arco é **varrido** (pés, tronco e cabeça) à procura de obstáculos. Sem ponto seguro, não salta, e o log diz porquê, com contagens.
+3. **Resgate.** Depois da aterragem, o NPC é vigiado durante 1,8 s; se estiver 90 abaixo do ponto previsto, ou a cair há quase um segundo, é **posto de volta onde estava**.
+4. **Quando salta.** Um caçador (em combate, com o jogador como alvo) salta se estiver **parado há 1,5 s e a ver-te** (`standing`), ou **a andar há 2 s com o rumo a mais de 60° da linha reta** (`detour`), com o jogador a mais de 220 unidades e depois de 3,5 s desde a última tentativa. Longe de ti, vai aos poucos: cada salto leva-o até 520 unidades.
 
-O explorador foi testado aqui contra a imagem real do `TESV.exe` (nomes das vtables, procura de um caminho de 6 nós inventado, correlação de um campo de estado). Isso valida a lógica; não valida o que acontece dentro do jogo.
+O explorador e a sonda estão **desligados** por defeito: já cumpriram a missão e eram pesados.
+
+## Tecla de teste
+
+**Seta para cima** faz o inimigo em combate mais perto de ti saltar já, sem as condições de tempo e de visão (usa o mesmo planeador, por isso continua a recusar aterragens inseguras). Só funciona com o jogo em primeiro plano; não a uses com a consola ou um menu abertos. A seta para baixo (vault do FreeRun) está desligada.
 
 ## 1. Compilar e instalar
 
-Apaga a pasta `going-catch-you` do repositório e carrega a deste ZIP (ficheiro novo: `Explorer.cpp/.h`; o `.vcxproj` mudou). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas). A primeira linha do log tem de dizer `0.4.0-explore`.
+Substitui a pasta `going-catch-you` do repositório pela deste ZIP (o `.vcxproj` não mudou). Faz o commit diretamente no `main`, corre o workflow e instala `GoingCatchYou.dll` **e** `GoingCatchYou.ini` (há chaves novas). A primeira linha do log tem de dizer `0.5.0-leap`.
 
-## 2. Testar (uns 15 minutos)
+## 2. Testar
 
-1. Carrega um save e **fica perto de NPCs sem combate** (uma cidade): o explorador precisa de uns 40 para comparar.
-2. Entra em combate com **vários inimigos**, em sítios onde dêem voltas: terreno com muros, rochas, desníveis.
-3. **Põe-te num sítio onde não te alcancem** (em cima de uma rocha ou de um muro) e espera que alguns fiquem parados a encarar-te.
-4. Nos momentos interessantes (um a dar a volta, um parado a encarar-te, um que passa para o outro lado), carrega **Shift+Insert** uma vez. Três ou quatro vezes chegam.
-5. Sai do jogo e envia o log.
+1. Põe-te num sítio com inimigos que costumem ficar parados à distância ou dar a volta: em cima de uma rocha, de um muro, do outro lado de uma vedação, de um desnível.
+2. **Repara no que vês:** a pose durante o voo (queda ou a deslizar?), a aterragem (suave, enterrado, a flutuar, a girar), e se vão atrás de ti depois.
+3. Pode usar a **seta para cima** num inimigo em combate para ver já um salto.
+4. Envia o log.
 
-## 3. Linhas do log
+## 3. O que o log mostra
 
 | Linha | Significado |
 |---|---|
-| `explore: new in a hunter: <caminho> <classe>` | um objeto que um caçador tem, e onde está (`a` é o ator, `a>88` o processo, `a>88>4` o processo médio, `a>88>8` o alto). Só as primeiras 180 |
-| `explore: path? <id> <onde> +<offset> stride <n>` | uma sequência que pode ser um caminho: quantos nós, o comprimento, e as distâncias do primeiro e do último ao NPC e ao jogador |
-| `explore: summary` | a cada 30 s: objetos que só os caçadores têm; sítios onde há sequências de posições; campos que separam andar de parar e aproximar-se de afastar-se |
-| `dump: …` | o despejo do Shift+Insert, objeto a objeto |
-| `observer: …` | tudo o que já havia (`track`, `STOPPED`, `DETOUR`, `world`) |
+| `jump: skip <id> (standing/detour): …` | tinha o gatilho mas não saltou, e porquê: sem linha de visão, ou **sem aterragem segura** com a contagem dos motivos (sem chão, chão de outro tipo, não nivelado com o jogador, fora de alcance, demasiado perto do jogador, não plano, algo por cima, gente lá, demasiado rápido, arco bloqueado) |
+| `jump: plan <id> (…): lands … ahead, … from the player, ground … ; … u/s along, … u/s up, … s` | planeou um salto |
+| `jump: begin / landed <id>` | o salto começou e acabou |
+| `jump: settled <id> (+0.3 s)` | 0,3 s depois: a que distância do ponto previsto ficou, estado do controlador, apoio, tempo de queda |
+| `jump: RESCUED <id>: …` | o NPC foi posto de volta onde estava (e porquê) |
+| `jump: aftermath <id> (+2.5 s)` | se foi atrás de ti (mais perto, mais longe) e se foi resgatado |
+| `manual: LEAP on <id>` | a tecla de teste |
+| `observer: DETOUR <id>` | um caçador anda há 2 s sem ir direto a ti |
 
 ## 4. Limitações
 
-- Lê memória por ponteiros, protegida por verificações e por um tratador de exceções; se falhar 3 vezes o explorador desliga-se e o log diz.
+- **Não conhece o navmesh.** O gatilho é comportamental: um caçador que está só à espera, ou que tem um caminho curto a que o jogo ainda não deu importância, também pode ser mandado saltar.
+- **Ainda não lê o caminho do NPC** (o explorador não achou os pontos do percurso), por isso não sabe se o caminho normal resolveria.
+- O NPC **não é rodado**: salta com a orientação que já tinha.
 - Só vê a célula onde o jogador está.
-- A procura de caminhos é heurística: pode dar falsos positivos (matrizes, vetores) e perder caminhos guardados de outra forma. O despejo e a correlação ajudam a decidir.
-- O salto e as teclas de teste continuam no código, desligados (`bJump=0`, `bManualKeys=0`); a sonda antiga também (`bProbe=0`).
+- A altura de início de queda é escrita em unidades do jogo (como o projeto FreeRun faz); se o dano de queda aparecer na aterragem, o log mostra-o.

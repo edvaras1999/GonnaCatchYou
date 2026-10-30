@@ -1,8 +1,7 @@
 // Vault.h - what is in front of a hunter, and whether a hop would get it past.
 //
-// Scan casts into the physics world; Measure and the Plan functions turn what
-// was found into a hop for Jump.cpp (or a FreeRun vault for FreeRun.cpp) to
-// carry out. None of them changes the game.
+// Scan casts into the physics world; Measure and PlanLeap turn what was found
+// into a leap for Jump.cpp (or a FreeRun vault for FreeRun.cpp) to carry out. None of them changes the game.
 //
 // Characters are never obstacles here. Version 0.3.0 counted a hit on a
 // character's capsule (layer 30) like any other, and reported the player's own
@@ -50,14 +49,13 @@ namespace Vault
 	bool Measure(Actor * npc, const NiPoint3 & np, const Scene & s, float & distance, float & height,
 				 char * why, size_t whySize);
 
-	// A hop over a low obstacle in the way, for Jump.cpp. The obstacle has to be
-	// within `triggerDistance` and no higher than `maxHeight`.
-	bool PlanLowObstacle(Actor * npc, const NiPoint3 & np, const NiPoint3 & pp, const Scene & s,
-						 float triggerDistance, float maxHeight,
-						 Jump::Plan & plan, char * why, size_t whySize);
-
-	// For the manual test: a hop of about 160 units toward the player over
-	// whatever is there, whether or not there is an obstacle.
-	bool PlanPlainHop(Actor * npc, const NiPoint3 & np, const Scene & s,
-					  Jump::Plan & plan, char * why, size_t whySize);
+	// Where a leap toward the player could land, and the arc to get there, for
+	// Jump.cpp. The landing is on solid, flat ground at about the player's own
+	// level, close to him but not on him, with nothing overhead and nobody
+	// standing there, within reach of the NPC (rise and drop limits), and the
+	// arc is swept along its length for anything in the way. `crowd` lists the
+	// other characters nearby. False, with the reasons counted, when nothing is
+	// safe.
+	bool PlanLeap(Actor * npc, const NiPoint3 & np, const NiPoint3 & pp, const NiPoint3 * crowd, UInt32 crowdCount,
+				  Jump::Plan & plan, char * why, size_t whySize);
 }

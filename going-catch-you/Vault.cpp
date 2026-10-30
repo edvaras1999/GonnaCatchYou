@@ -166,105 +166,181 @@ namespace Vault
 		return true;
 	}
 
-	bool PlanLowObstacle(Actor * npc, const NiPoint3 & np, const NiPoint3 & pp, const Scene & s,
-						 float triggerDistance, float maxHeight,
-						 Jump::Plan & plan, char * why, size_t whySize)
+	namespace
 	{
-		float d0 = 0.0f, height = 0.0f;
-		if(!Measure(npc, np, s, d0, height, why, whySize)) return false;
-
-		if(d0 > triggerDistance)
+		// Ground an NPC can be put down on: static geometry, animated static,
+		// terrain, ground. Anything else (clutter, props, trees, water, triggers)
+		// is not trusted to hold a landing.
+		bool Walkable(UInt32 layer)
 		{
-			sprintf_s(why, whySize, "the obstacle is %.0f ahead, farther than %.0f", d0, triggerDistance);
+			return layer == 1 || layer == 2 || layer == 13 || layer == 17;
+		}
+
+		// A ballistic arc from the start to a point `dh` away horizontally and `dz`
+		// higher, rising `extra` above the higher of the two. Returns the vertical
+		// speed, the time of flight and the horizontal speed.
+		void Ballistic(float dz, float dh, float extra, float g, float & vz0, float & T, float & vh)
+		{
+			const float apex = (dz > 0.0f ? dz : 0.0f) + extra;
+			vz0 = sqrtf(2.0f * g * apex);
+			const float up = vz0 / g;
+			float fall = apex - dz;
+			if(fall < 0.0f) fall = 0.0f;
+			const float down = sqrtf(2.0f * fall / g);
+			T = up + down;
+			vh = T > 0.01f ? dh / T : 0.0f;
+		}
+
+		// Is anything in the way of the arc? Cast along it at the feet, the torso and
+		// the head. The feet are left out of the first two and last two segments,
+		// where they are close to the ground and the ground is not "in the way".
+		bool ArcBlocked(Actor * npc, const NiPoint3 & np, float ux, float uy, float vh, float vz0, float g, float T)
+		{
+			static const float heights[3] = { 25.0f, 70.0f, 140.0f };
+			const int steps = 12;
+			for(int h = 0; h < 3; ++h)
+			{
+				NiPoint3 prev(np.x, np.y, np.z + heights[h]);
+				for(int i = 1; i <= steps; ++i)
+				{
+					const float t = T * (float)i / (float)steps;
+					const NiPoint3 p(np.x + ux * vh * t, np.y + uy * vh * t, np.z + vz0 * t - 0.5f * g * t * t + heights[h]);
+					const bool skip = (h == 0) && (i <= 2 || i > steps - 2);
+					const float sx = p.x - prev.x, sy = p.y - prev.y, sz = p.z - prev.z;
+					const float len = sqrtf(sx * sx + sy * sy + sz * sz);
+					if(!skip && len > 1.0f)
+					{
+						const NiPoint3 d(sx / len, sy / len, sz / len);
+						if(CastSolid(prev, d, len, npc).hit) return true;
+					}
+					prev = p;
+				}
+			}
 			return false;
 		}
-		if(height > maxHeight)
-		{
-			sprintf_s(why, whySize, "too high: about %.0f, the limit is %.0f", height, maxHeight);
-			return false;
-		}
-
-		// Where it comes down: past the obstacle, on ground at about the NPC's own
-		// level, with nothing overhead and a clear corridor at the height of the
-		// arc. Not past the player.
-		static const float past[3] = { 70.0f, 100.0f, 140.0f };
-		const NiPoint3 down(0.0f, 0.0f, -1.0f);
-		bool found = false;
-		float landDist = 0.0f, landZ = 0.0f;
-		for(int i = 0; i < 3 && !found; ++i)
-		{
-			const float d = d0 + past[i];
-			if(d + 60.0f > s.hlen) continue;
-
-			const NiPoint3 p(np.x + s.dir.x * d, np.y + s.dir.y * d, 0.0f);
-
-			const NiPoint3 gs(p.x, p.y, np.z + height + 120.0f);
-			const Solid g = CastSolid(gs, down, 400.0f, npc);
-			if(!g.hit) continue;
-			const float gz = gs.z - g.distance;
-			if(fabsf(gz - np.z) > 45.0f) continue;
-
-			const NiPoint3 up(0.0f, 0.0f, 1.0f);
-			const NiPoint3 os(p.x, p.y, gz + 10.0f);
-			if(CastSolid(os, up, 160.0f, npc).hit) continue;
-
-			const NiPoint3 cs(np.x, np.y, np.z + height + 50.0f);
-			if(CastSolid(cs, s.dir, d, npc).hit) continue;
-
-			found = true;
-			landDist = d;
-			landZ = gz;
-		}
-		if(!found) { strcpy_s(why, whySize, "no safe place to land past it"); return false; }
-
-		// The arc has to clear the top by a margin where the obstacle is, which is
-		// d0 of the way along; the parabola is highest in the middle, so where the
-		// obstacle is off-centre it has to be raised a little to compensate.
-		const float sObs = d0 / landDist;
-		const float shape = 4.0f * sObs * (1.0f - sObs);
-		const float chordAtObstacle = (landZ - np.z) * sObs;
-		float apex = (height + 30.0f - chordAtObstacle) / (shape > 0.5f ? shape : 0.5f);
-		if(apex < 45.0f) apex = 45.0f;
-		if(apex > 170.0f) apex = 170.0f;
-
-		float seconds = landDist / 380.0f + 0.15f;
-		if(seconds < 0.5f) seconds = 0.5f;
-		if(seconds > 1.2f) seconds = 1.2f;
-
-		plan.start = np;
-		plan.land = NiPoint3(np.x + s.dir.x * landDist, np.y + s.dir.y * landDist, landZ);
-		plan.apex = apex;
-		plan.durationSec = seconds;
-
-		sprintf_s(why, whySize, "obstacle %.0f ahead, about %.0f high; lands %.0f ahead (ground %+.0f); arc %.0f over %.2f s",
-				  d0, height, landDist, landZ - np.z, apex, seconds);
-		return true;
 	}
 
-	bool PlanPlainHop(Actor * npc, const NiPoint3 & np, const Scene & s,
-					  Jump::Plan & plan, char * why, size_t whySize)
+	bool PlanLeap(Actor * npc, const NiPoint3 & np, const NiPoint3 & pp, const NiPoint3 * crowd, UInt32 crowdCount,
+				  Jump::Plan & plan, char * why, size_t whySize)
 	{
 		why[0] = 0;
 
-		const float d = 160.0f;
-		const NiPoint3 gs(np.x + s.dir.x * d, np.y + s.dir.y * d, np.z + 120.0f);
-		const NiPoint3 down(0.0f, 0.0f, -1.0f);
-		const Solid g = CastSolid(gs, down, 400.0f, npc);
-		if(!g.hit) { strcpy_s(why, whySize, "no ground 160 units ahead"); return false; }
+		const float dx = pp.x - np.x, dy = pp.y - np.y;
+		const float hlen = sqrtf(dx * dx + dy * dy);
+		if(hlen < 1.0f) { strcpy_s(why, whySize, "on top of the player"); return false; }
 
-		const float gz = gs.z - g.distance;
-		if(fabsf(gz - np.z) > 80.0f)
+		const float dirx = dx / hlen, diry = dy / hlen;
+		const float sidex = -diry, sidey = dirx;
+
+		// How far along the line to the player a landing is tried: first where it
+		// would be `leapLandNear` short of him, then a little farther (a platform
+		// he stands on may start only there), then nearer the NPC. Never closer to
+		// the player than 90, never farther than a leap goes.
+		float dMax = hlen - 90.0f;
+		if(dMax > Settings::leapMaxDistance) dMax = Settings::leapMaxDistance;
+		float d0 = hlen - Settings::leapLandNear;
+		if(d0 > Settings::leapMaxDistance) d0 = Settings::leapMaxDistance;
+
+		float distances[6];
+		int nDistances = 0;
+		const float offsets[6] = { 0.0f, 50.0f, 100.0f, -100.0f, -200.0f, -300.0f };
+		for(int i = 0; i < 6; ++i)
 		{
-			sprintf_s(why, whySize, "the ground 160 ahead is %+.0f from the feet, too different", gz - np.z);
+			const float d = d0 + offsets[i];
+			if(d >= 120.0f && d <= dMax) distances[nDistances++] = d;
+		}
+		if(nDistances == 0)
+		{
+			sprintf_s(why, whySize, "the player is %.0f away, already within reach", hlen);
 			return false;
 		}
 
-		plan.start = np;
-		plan.land = NiPoint3(gs.x, gs.y, gz);
-		plan.apex = 60.0f;
-		plan.durationSec = 0.7f;
+		UInt32 noGround = 0, badLayer = 0, notLevel = 0, outOfReach = 0, notFlat = 0, overhead = 0, crowded = 0, tooNear = 0, tooFast = 0, blocked = 0;
+		UInt32 firstBadLayer = 0;
 
-		sprintf_s(why, whySize, "plain hop of %.0f units toward the player (ground %+.0f), arc %.0f over %.2f s", d, gz - np.z, plan.apex, plan.durationSec);
-		return true;
+		static const float lateral[3] = { 0.0f, 80.0f, -80.0f };
+		const NiPoint3 down(0.0f, 0.0f, -1.0f);
+		const NiPoint3 up(0.0f, 0.0f, 1.0f);
+
+		for(int b = 0; b < nDistances; ++b)
+		{
+			const float d = distances[b];
+
+			for(int l = 0; l < 3; ++l)
+			{
+				const float lx = np.x + dirx * d + sidex * lateral[l];
+				const float ly = np.y + diry * d + sidey * lateral[l];
+
+				// the ground there: the first solid thing down from above both of them
+				const float startZ = (np.z > pp.z ? np.z : pp.z) + 180.0f;
+				const Solid g = CastSolid(NiPoint3(lx, ly, startZ), down, 1200.0f, npc);
+				if(!g.hit) { ++noGround; continue; }
+				if(!Walkable(g.layer)) { ++badLayer; if(!firstBadLayer) firstBadLayer = g.layer; continue; }
+				const float gz = startZ - g.distance;
+
+				if(fabsf(gz - pp.z) > 120.0f) { ++notLevel; continue; }
+				const float rise = gz - np.z;
+				if(rise > Settings::leapMaxRise || -rise > Settings::leapMaxDrop) { ++outOfReach; continue; }
+
+				// close to the player, but not on him
+				const float px = lx - pp.x, py = ly - pp.y;
+				if(sqrtf(px * px + py * py) < 90.0f) { ++tooNear; continue; }
+
+				// flat: four more casts around it come down at the same height
+				static const float around[4][2] = { { 35.0f, 0.0f }, { -35.0f, 0.0f }, { 0.0f, 35.0f }, { 0.0f, -35.0f } };
+				bool flat = true;
+				for(int k = 0; k < 4 && flat; ++k)
+				{
+					const Solid f = CastSolid(NiPoint3(lx + around[k][0], ly + around[k][1], gz + 60.0f), down, 160.0f, npc);
+					if(!f.hit || !Walkable(f.layer) || fabsf((gz + 60.0f - f.distance) - gz) > 25.0f) flat = false;
+				}
+				if(!flat) { ++notFlat; continue; }
+
+				if(CastSolid(NiPoint3(lx, ly, gz + 10.0f), up, 190.0f, npc).hit) { ++overhead; continue; }
+
+				bool busy = false;
+				for(UInt32 c = 0; c < crowdCount && !busy; ++c)
+				{
+					const float cx = crowd[c].x - lx, cy = crowd[c].y - ly;
+					if(sqrtf(cx * cx + cy * cy) < 110.0f && fabsf(crowd[c].z - gz) < 150.0f) busy = true;
+				}
+				if(busy) { ++crowded; continue; }
+
+				// the arc: raised until nothing is in its way
+				const float ex = lx - np.x, ey = ly - np.y;
+				const float dh = sqrtf(ex * ex + ey * ey);
+				const float ux = ex / dh, uy = ey / dh;
+				const float dz = gz - np.z;
+
+				static const float extras[4] = { 55.0f, 110.0f, 170.0f, 240.0f };
+				for(int e = 0; e < 4; ++e)
+				{
+					float vz0, T, vh;
+					Ballistic(dz, dh, extras[e], Settings::leapGravity, vz0, T, vh);
+					if(vh > Settings::leapMaxSpeed || T > 1.9f) { ++tooFast; continue; }
+					if(ArcBlocked(npc, np, ux, uy, vh, vz0, Settings::leapGravity, T)) { ++blocked; continue; }
+
+					plan.start = np;
+					plan.land = NiPoint3(lx, ly, gz);
+					plan.dir = NiPoint3(ux, uy, 0.0f);
+					plan.horizontalSpeed = vh;
+					plan.verticalSpeed = vz0;
+					plan.gravity = Settings::leapGravity;
+					plan.durationSec = T;
+
+					sprintf_s(why, whySize, "lands %.0f ahead (%+.0f sideways), %.0f from the player, ground %+.0f from the feet; "
+							  "%.0f u/s along, %.0f u/s up, %.2f s",
+							  dh, lateral[l], sqrtf(px * px + py * py), dz, vh, vz0, T);
+					return true;
+				}
+			}
+		}
+
+		sprintf_s(why, whySize, "no safe landing: no ground %u, ground of another kind %u (first layer %u), not level with the player %u, "
+				  "out of reach %u, too near the player %u, not flat %u, overhead %u, crowded %u, too fast %u, arc blocked %u",
+				  (unsigned int)noGround, (unsigned int)badLayer, (unsigned int)firstBadLayer, (unsigned int)notLevel,
+				  (unsigned int)outOfReach, (unsigned int)tooNear, (unsigned int)notFlat, (unsigned int)overhead,
+				  (unsigned int)crowded, (unsigned int)tooFast, (unsigned int)blocked);
+		return false;
 	}
 }

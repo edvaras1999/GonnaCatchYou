@@ -20,10 +20,15 @@ namespace Settings
 	extern UInt32	summaryMs;			// iSummaryMs      how often the probe statistics are written
 	extern bool		jump;				// bJump               make stopped hunters hop over low obstacles
 	extern bool		jumpDryRun;			// bJumpDryRun         plan and log the hop, but do not do it
-	extern float	jumpMaxObstacle;	// fJumpMaxObstacle    the highest obstacle it will hop, in units
-	extern float	jumpTriggerDistance;// fJumpTriggerDistance  the obstacle has to be this close to the NPC
+	extern float	leapMaxDistance;	// fLeapMaxDistance    the longest a leap goes, in units
+	extern float	leapMaxRise;		// fLeapMaxRise        the most it goes up
+	extern float	leapMaxDrop;		// fLeapMaxDrop        the most it comes down
+	extern float	leapGravity;		// fLeapGravity        the arc's gravity, units/s^2
+	extern float	leapMaxSpeed;		// fLeapMaxSpeed       the fastest it goes along, units/s
+	extern float	leapLandNear;		// fLeapLandNear       how close to the player it tries to land
+	extern bool		leapNeedSight;		// bLeapNeedSight      a standing hunter leaps only if it can see the player
+	extern UInt32	leapStallMs;		// iLeapStallMs        how long a hunter has to stand still before it leaps
 	extern float	jumpMinPlayerDistance;// fJumpMinPlayerDistance  a hunter nearer than this to the player does not hop
-	extern UInt32	jumpStopMs;			// iJumpStopMs         how long it has to stand still first
 	extern UInt32	jumpCooldownMs;		// iJumpCooldownMs     between two attempts for the same NPC
 	extern bool		jumpAnimation;		// bJumpAnimation      send the jump animation events
 	extern char		jumpStartEvent[64];	// sJumpStartEvent
