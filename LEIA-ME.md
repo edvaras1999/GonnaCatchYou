@@ -1,10 +1,16 @@
-# Going Catch You — versão 0.5.0 (a perseguição)
+# Going Catch You — versão 0.5.1 (a perseguição, corrigida)
 
 Um caçador que **não se aproxima de ti** passa a **saltar na tua direção**, em vez de ficar parado a encarar-te ou a dar a volta. **Esta versão altera os NPCs.**
 
-> **Aviso:** o salto nunca foi visto a funcionar bem (na 0.3.1 correu mal). Esta versão refaz a mecânica e acrescenta proteções, mas **não foi testada em jogo**. Se algo correr mal, `bJump=0` no INI volta ao modo só de leitura, `bJumpDryRun=1` planeia e escreve no log sem fazer nada, e `bManualKeys=0` desliga a tecla de teste.
+> **Estado:** a mecânica do salto funciona (confirmado na 0.5.0: 25 aterragens, todos no chão). A 0.5.1 corrige três problemas dessa versão (ver abaixo). Ainda não foi testada em jogo. Se algo correr mal, `bJump=0` no INI volta ao modo só de leitura, `bJumpDryRun=1` planeia e escreve no log sem fazer nada, e `bManualKeys=0` desliga a tecla de teste.
 
-## O que mudou em relação à 0.3.1 e porquê
+## O que mudou na 0.5.1 (em relação à 0.5.0)
+
+1. **Gatilho "detour" retirado do salto.** Na 0.5.0, um NPC a lutar corpo a corpo que dava meia volta ou se esquivava disparava o gatilho de desvio e era mandado saltar. Resultado: saltava quando não estava preso, às vezes por trás do jogador. Agora o salto só dispara com **"standing"**: parado, sem se aproximar, e a ver o jogador.
+2. **Cooldown duplo após resgate.** Na 0.5.0, um NPC resgatado voltava a tentar imediatamente e caía de novo. Agora aguarda o dobro do cooldown normal (8 s em vez de 4 s).
+3. **Distância mínima de 150 unidades.** Um NPC em combate corpo a corpo pode estar a 30 unidades; não faz sentido mandá-lo saltar 500 unidades.
+
+## O que está na 0.5.0 e se mantém
 
 O que falhou na 0.3.1 foi o salto simples da tecla: aterrou praticamente sobre o jogador, o NPC foi empurrado através do chão e morreu. Também flutuava. Agora:
 

@@ -242,6 +242,10 @@ namespace
 
 namespace Jump
 {
+	// Returns true when this NPC's last landing needed a rescue and the aftermath
+	// has not yet been reported. The Observer calls this to apply the extra cooldown.
+	bool WasRescued(UInt32 id);
+
 	bool Begin(Actor * npc, UInt32 id, const Plan & plan)
 	{
 		if(!s_ok) return false;
@@ -312,6 +316,13 @@ namespace Jump
 				if(s_faults >= 2) { s_ok = false; _ERROR("jump: switched off for the rest of the session"); }
 			}
 		}
+	}
+
+	bool WasRescued(UInt32 id)
+	{
+		for(int i = 0; i < kMaxHops; ++i)
+			if(s_hops[i].used && s_hops[i].id == id && s_hops[i].rescued) return true;
+		return false;
 	}
 
 	void Reset()

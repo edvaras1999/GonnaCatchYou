@@ -39,6 +39,7 @@ namespace Jump
 	bool Begin(Actor * npc, UInt32 id, const Plan & plan);
 
 	bool	Active(UInt32 id);		// is this NPC in the air right now
+	bool	WasRescued(UInt32 id);	// true until the aftermath clears it
 	UInt32	ActiveCount();
 
 	// Every frame. Moves each leap along, watches the landings, and writes the

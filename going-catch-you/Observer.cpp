@@ -99,6 +99,7 @@ namespace
 		float	minDist;
 		DWORD	stopSinceMs;		// since when it has been standing still on the ground (any distance)
 		DWORD	lastJumpTryMs;
+		DWORD	lastRescueMs;
 		DWORD	lastSkipLogMs;
 		DWORD	lastExploreMs;
 		DWORD	detourSinceMs;		// since when it has been moving, but not toward the player
@@ -879,6 +880,8 @@ namespace
 			else { t->detourSinceMs = 0; t->detourLogged = false; }
 
 			const bool stopLong = t->stopSinceMs && now - t->stopSinceMs >= Settings::leapStallMs;
+			// Detour fires log lines but not leaps. A detouring NPC is moving and may be fighting;
+			// sending it into a leap makes it jump past or behind the player.
 			const bool detourLong = t->detourSinceMs && now - t->detourSinceMs >= Settings::detourMs;
 
 			if(detourLong && !t->detourLogged)
@@ -890,8 +893,13 @@ namespace
 						 acosf(t->headingCos) * 57.29578f, dist, dz);
 			}
 
-			if(Settings::jump && s_jumpOk && hunter && (stopLong || detourLong) &&
-			   dist > Settings::jumpMinPlayerDistance &&
+			// Only "standing" (not closing AND paused) triggers a leap. The
+			// detour trigger is logged but does not leap: a moving NPC is fighting or
+			// navigating, and a leap would fire in the wrong direction.
+			if(Jump::WasRescued(id)) t->lastRescueMs = now;
+			const bool rescueCooldown = t->lastRescueMs && now - t->lastRescueMs < Settings::jumpCooldownMs * 2;
+			if(Settings::jump && s_jumpOk && hunter && stopLong && !rescueCooldown &&
+			   dist > 150.0f && dist > Settings::jumpMinPlayerDistance &&
 			   now - t->lastJumpTryMs >= Settings::jumpCooldownMs &&
 			   !Jump::Active(id) && !FreeRun::Active(id) && Jump::ActiveCount() < 2 && jumpTries < 1)
 			{

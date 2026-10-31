@@ -21,7 +21,7 @@ namespace Settings
 	UInt32	castMs				= 1000;
 	float	castDistance		= 300.0f;
 	UInt32	summaryMs			= 30000;
-	bool	jump				= true;
+	bool	jump				= true;	// kept on
 	bool	jumpDryRun			= false;
 	float	leapMaxDistance		= 520.0f;
 	float	leapMaxRise			= 180.0f;
@@ -31,8 +31,8 @@ namespace Settings
 	float	leapLandNear		= 140.0f;
 	bool	leapNeedSight		= true;
 	UInt32	leapStallMs			= 1500;
-	float	jumpMinPlayerDistance = 220.0f;
-	UInt32	jumpCooldownMs		= 3500;
+	float	jumpMinPlayerDistance = 250.0f;
+	UInt32	jumpCooldownMs		= 4000;
 	bool	jumpAnimation		= false;
 	char	jumpStartEvent[64]	= "JumpDirectionalStart";
 	char	jumpEndEvent[64]	= "JumpLand";
