@@ -1,10 +1,24 @@
-# Going Catch You — versão 0.5.1 (a perseguição, corrigida)
+# Going Catch You — versão 0.5.2
 
 Um caçador que **não se aproxima de ti** passa a **saltar na tua direção**, em vez de ficar parado a encarar-te ou a dar a volta. **Esta versão altera os NPCs.**
 
 > **Estado:** a mecânica do salto funciona (confirmado na 0.5.0: 25 aterragens, todos no chão). A 0.5.1 corrige três problemas dessa versão (ver abaixo). Ainda não foi testada em jogo. Se algo correr mal, `bJump=0` no INI volta ao modo só de leitura, `bJumpDryRun=1` planeia e escreve no log sem fazer nada, e `bManualKeys=0` desliga a tecla de teste.
 
-## O que mudou na 0.5.1 (em relação à 0.5.0)
+## O que mudou na 0.5.2 (em relação à 0.5.1)
+
+**Três zonas ao redor do jogador:**
+
+| Zona | Raio | O que faz |
+|---|---|---|
+| **Observação** | 2000 unidades (~28 m, o lock-on) | O plugin rastreia NPCs, regista DETOUR e STOPPED |
+| **Intervenção** | 700 unidades (~10 m) | Dentro desta, ajuda caçadores presos a saltar |
+| **Soltar** | 100 unidades (~1,5 m) | Não salta, deixa a IA atacar normalmente |
+
+**Outras correções:**
+- A aterragem tem de ser **mais perto do jogador do que o ponto de partida** do NPC (corrige o 00083E3C que aterrou no outro lado de uma elevação e ficou a 5347 unidades).
+- O filtro de alvo está documentado: só dispara quando `actor+0x90 == handle do jogador`. O 00096EE2 estava a combater outra coisa e não devia ter disparado.
+
+## O que estava na 0.5.1 e se mantém
 
 1. **Gatilho "detour" retirado do salto.** Na 0.5.0, um NPC a lutar corpo a corpo que dava meia volta ou se esquivava disparava o gatilho de desvio e era mandado saltar. Resultado: saltava quando não estava preso, às vezes por trás do jogador. Agora o salto só dispara com **"standing"**: parado, sem se aproximar, e a ver o jogador.
 2. **Cooldown duplo após resgate.** Na 0.5.0, um NPC resgatado voltava a tentar imediatamente e caía de novo. Agora aguarda o dobro do cooldown normal (8 s em vez de 4 s).

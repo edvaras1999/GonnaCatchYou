@@ -284,7 +284,12 @@ namespace Vault
 
 				// close to the player, but not on him
 				const float px = lx - pp.x, py = ly - pp.y;
-				if(sqrtf(px * px + py * py) < 90.0f) { ++tooNear; continue; }
+				const float landToPlayer = sqrtf(px * px + py * py);
+				if(landToPlayer < 90.0f) { ++tooNear; continue; }
+				// the landing has to be closer to the player than where the NPC
+				// started - no leaping further away (what happened to 00083E3C)
+				const float npcToPlayer = sqrtf((np.x-pp.x)*(np.x-pp.x)+(np.y-pp.y)*(np.y-pp.y));
+				if(landToPlayer >= npcToPlayer - 40.0f) { ++tooNear; continue; }
 
 				// flat: four more casts around it come down at the same height
 				static const float around[4][2] = { { 35.0f, 0.0f }, { -35.0f, 0.0f }, { 0.0f, 35.0f }, { 0.0f, -35.0f } };

@@ -10,7 +10,7 @@ namespace Settings
 {
 	bool	enabled				= true;
 	UInt32	sampleMs			= 500;
-	float	radius				= 3000.0f;
+	float	radius				= 2000.0f;
 	bool	allActors			= false;
 	UInt32	statusMs			= 2000;
 	float	stoppedSpeed		= 30.0f;
@@ -23,15 +23,16 @@ namespace Settings
 	UInt32	summaryMs			= 30000;
 	bool	jump				= true;	// kept on
 	bool	jumpDryRun			= false;
-	float	leapMaxDistance		= 520.0f;
+	float	leapActiveRadius	= 700.0f;
+	float	leapMaxDistance		= 600.0f;
 	float	leapMaxRise			= 180.0f;
 	float	leapMaxDrop			= 420.0f;
 	float	leapGravity			= 900.0f;
 	float	leapMaxSpeed		= 650.0f;
-	float	leapLandNear		= 140.0f;
+	float	leapLandNear		= 100.0f;
 	bool	leapNeedSight		= true;
 	UInt32	leapStallMs			= 1500;
-	float	jumpMinPlayerDistance = 250.0f;
+	float	jumpMinPlayerDistance = 100.0f;
 	UInt32	jumpCooldownMs		= 4000;
 	bool	jumpAnimation		= false;
 	char	jumpStartEvent[64]	= "JumpDirectionalStart";
@@ -118,19 +119,21 @@ namespace Settings
 		v = ReadInt("iDetourMs", 2000);		detourMs	= v < 500  ? 500  : (UInt32)v;
 		jumpDryRun			= ReadInt("bJumpDryRun", 0) != 0;
 		jumpAnimation		= ReadInt("bJumpAnimation", 0) != 0;
-		leapMaxDistance		= ReadFloat("fLeapMaxDistance", 520.0f);
+		leapActiveRadius	= ReadFloat("fLeapActiveRadius", 700.0f);
+		if(leapActiveRadius < 200.0f) leapActiveRadius = 200.0f; if(leapActiveRadius > 1500.0f) leapActiveRadius = 1500.0f;
+		leapMaxDistance		= ReadFloat("fLeapMaxDistance", 600.0f);
 		leapMaxRise			= ReadFloat("fLeapMaxRise", 180.0f);
 		leapMaxDrop			= ReadFloat("fLeapMaxDrop", 420.0f);
 		leapGravity			= ReadFloat("fLeapGravity", 900.0f);
 		leapMaxSpeed		= ReadFloat("fLeapMaxSpeed", 650.0f);
-		leapLandNear		= ReadFloat("fLeapLandNear", 140.0f);
+		leapLandNear		= ReadFloat("fLeapLandNear", 100.0f);
 		leapNeedSight		= ReadInt("bLeapNeedSight", 1) != 0;
 		if(leapMaxDistance < 200.0f) leapMaxDistance = 200.0f;
 		if(leapMaxDistance > 900.0f) leapMaxDistance = 900.0f;
 		if(leapGravity < 300.0f) leapGravity = 300.0f;
 		if(leapMaxSpeed < 200.0f) leapMaxSpeed = 200.0f;
 		if(leapLandNear < 120.0f) leapLandNear = 120.0f;
-		jumpMinPlayerDistance = ReadFloat("fJumpMinPlayerDistance", 220.0f);
+		jumpMinPlayerDistance = ReadFloat("fJumpMinPlayerDistance", 100.0f);
 		GetPrivateProfileStringA("General", "sJumpStartEvent", "JumpFall", jumpStartEvent, sizeof(jumpStartEvent), s_path);
 		GetPrivateProfileStringA("General", "sJumpEndEvent", "JumpLand", jumpEndEvent, sizeof(jumpEndEvent), s_path);
 		v = ReadInt("iLeapStallMs", 1500);		leapStallMs		= v < 500  ? 500  : (UInt32)v;
@@ -142,7 +145,7 @@ namespace Settings
 		v = ReadInt("iProbeMs", 4000);		probeMs		= v < 500  ? 500  : (UInt32)v;
 		v = ReadInt("iMaxTracks", 12);		maxTracks	= v < 1    ? 1    : (v > 64 ? 64 : (UInt32)v);
 
-		radius				= ReadFloat("fRadius", 3000.0f);
+		radius				= ReadFloat("fRadius", 2000.0f);
 		castDistance		= ReadFloat("fCastDistance", 300.0f);
 		if(castDistance < 100.0f) castDistance = 100.0f;
 		stoppedSpeed		= ReadFloat("fStoppedSpeed", 30.0f);

@@ -20,6 +20,7 @@ namespace Settings
 	extern UInt32	summaryMs;			// iSummaryMs      how often the probe statistics are written
 	extern bool		jump;				// bJump               make stopped hunters hop over low obstacles
 	extern bool		jumpDryRun;			// bJumpDryRun         plan and log the hop, but do not do it
+	extern float	leapActiveRadius;	// fLeapActiveRadius   the plugin only leaps hunters within this range of the player
 	extern float	leapMaxDistance;	// fLeapMaxDistance    the longest a leap goes, in units
 	extern float	leapMaxRise;		// fLeapMaxRise        the most it goes up
 	extern float	leapMaxDrop;		// fLeapMaxDrop        the most it comes down

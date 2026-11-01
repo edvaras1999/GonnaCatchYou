@@ -899,7 +899,7 @@ namespace
 			if(Jump::WasRescued(id)) t->lastRescueMs = now;
 			const bool rescueCooldown = t->lastRescueMs && now - t->lastRescueMs < Settings::jumpCooldownMs * 2;
 			if(Settings::jump && s_jumpOk && hunter && stopLong && !rescueCooldown &&
-			   dist > 150.0f && dist > Settings::jumpMinPlayerDistance &&
+			   dist > Settings::jumpMinPlayerDistance && dist <= Settings::leapActiveRadius &&
 			   now - t->lastJumpTryMs >= Settings::jumpCooldownMs &&
 			   !Jump::Active(id) && !FreeRun::Active(id) && Jump::ActiveCount() < 2 && jumpTries < 1)
 			{
