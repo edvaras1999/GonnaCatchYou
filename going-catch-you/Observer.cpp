@@ -107,6 +107,7 @@ namespace
 		bool	headingPrimed;
 		bool	detourLogged;
 		bool	primed;				// closing and speed have a first real measurement
+		float	closingAvg;			// long-term average closing speed (slower decay) to filter brief pauses
 		UInt32	stalls;
 		bool	seen;
 		bool	stalled;
@@ -818,6 +819,8 @@ namespace
 				}
 
 				t->closing = t->primed ? 0.5f * t->closing + 0.5f * closing : closing;
+				// longer window: 0.85/0.15 keeps history for ~6 s
+				t->closingAvg = t->primed ? 0.85f * t->closingAvg + 0.15f * closing : closing;
 				t->vel = t->primed ? 0.5f * t->vel + 0.5f * vel : vel;
 				t->velZ = t->primed ? 0.5f * t->velZ + 0.5f * velZ : velZ;
 				t->primed = true;
@@ -896,9 +899,22 @@ namespace
 			// Only "standing" (not closing AND paused) triggers a leap. The
 			// detour trigger is logged but does not leap: a moving NPC is fighting or
 			// navigating, and a leap would fire in the wrong direction.
+			// After any completed leap (not just a rescue) add extra cooldown to
+			// let the AI resume before trying again.
 			if(Jump::WasRescued(id)) t->lastRescueMs = now;
-			const bool rescueCooldown = t->lastRescueMs && now - t->lastRescueMs < Settings::jumpCooldownMs * 2;
+			if(Jump::JustLanded(id)) t->lastRescueMs = now;   // re-uses lastRescueMs for the extended period
+			const bool rescueCooldown = t->lastRescueMs && now - t->lastRescueMs < Settings::leapJumpCooldown;
+			// Extra conditions before leaping:
+			// a) the NPC is above the player by more than 60: let it descend on its own
+			// b) it was still approaching on average recently (closingAvg > 20): brief pause, not stuck
+			// c) it is facing away from the player by more than 110 degrees: wrong direction, rotate first
+			const bool npcAbove = t->primed && dz > 60.0f;
+			const bool stillApproaching = t->primed && t->closingAvg > 20.0f;
+			const float facingErr = t->primed ? Engine::FacingAngle((TESObjectREFR *)npc, pp) : 0.0f;
+			const bool facingAway = t->primed && facingErr > 1.92f;  // 110 degrees in radians
+
 			if(Settings::jump && s_jumpOk && hunter && stopLong && !rescueCooldown &&
+			   !npcAbove && !stillApproaching && !facingAway &&
 			   dist > Settings::jumpMinPlayerDistance && dist <= Settings::leapActiveRadius &&
 			   now - t->lastJumpTryMs >= Settings::jumpCooldownMs &&
 			   !Jump::Active(id) && !FreeRun::Active(id) && Jump::ActiveCount() < 2 && jumpTries < 1)

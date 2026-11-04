@@ -1,18 +1,22 @@
-// Engine.h - the engine addresses, offsets and vtable slots Going Catch You uses.
+#pragma once
+#include <math.h>
+
+// Engine.h - every address, offset and vtable slot this plugin uses.
 //
-// Skyrim Legendary Edition 1.9.32.0.8 only. Everything here was carried over
-// from the Engine.h of the FreeRun NPC project, where each entry was read out of
-// the executable and tested in game. Nothing here is guessed from the Special
-// Edition build. Step 1 only READS the game; the controller helpers are the
-// read-only subset.
+// Skyrim Legendary Edition 1.9.32.0.8 only. Each entry carries the evidence it
+// was read from, so anyone can re-check it in a disassembler instead of
+// trusting the number. Nothing here is guessed from the Special Edition build:
+// where the two editions differ the difference is written down.
 //
-// Addresses are absolute for an image based at 0x00400000.
+// Addresses are absolute for an image based at 0x00400000, which is where the
+// executable is loaded. The plugin refuses to run on any other build.
 
 #pragma once
 
 #include "skse/GameTypes.h"
-#include "skse/GameForms.h"
 #include "skse/GameReferences.h"
+#include "skse/GameInput.h"
+#include "skse/GameMenus.h"
 #include "skse/NiNodes.h"
 #include "skse/NiTypes.h"
 
@@ -20,8 +24,12 @@ namespace Engine
 {
 	// ------------------------------------------------- reading the game safely
 	//
-	// See the long note in Engine.cpp. No pointer chain is walked by hand: every
-	// link is checked (non-null, aligned, committed memory) before it is used.
+	// See the long note in Engine.cpp. Nothing in this plugin walks a pointer
+	// chain into the game by hand any more. A tester's crash log caught the
+	// engine's OWN GetCharController faulting on a middle-process pointer that
+	// was not even aligned to four, moments after a save finished loading,
+	// because this mod had asked for the controller while the game was still
+	// rebuilding it.
 
 	// Can this process read `length` bytes there? Non-null, aligned, committed.
 	bool Readable(const void * address, size_t length);
@@ -30,34 +38,8 @@ namespace Engine
 	void * Link(const void * object, UInt32 offset);
 
 	// Forgets what it knows about which memory is committed. Called when the game
-	// has had a chance to unmap something (a load, a new game).
+	// has had a chance to unmap something.
 	void ForgetMemoryLayout();
-
-	namespace Controller
-	{
-		// Offsets confirmed in the constructor at 0x00D1E850 (FreeRun NPC project).
-		enum
-		{
-			kForwardVec			= 0x040,
-			kSurfaceInfo		= 0x150,	// supportedState is the first byte
-			kContext			= 0x190,
-			kCurrentState		= 0x1A0,
-			kFlags				= 0x1B8,
-			kWaterHeight		= 0x1D8,
-			kFallStartHeight	= 0x1E0,
-			kFallTime			= 0x1E4,
-			kSpeedPct			= 0x204,
-		};
-
-		enum
-		{
-			kFlag_Support			= 1 << 8,
-			kFlag_NoSim				= 1 << 17,	// physics off: the actor moves only where it is put
-		};
-
-		enum { kState_OnGround = 0, kState_Jumping = 1, kState_InAir = 2, kState_Climbing = 3, kState_Flying = 4, kState_Swimming = 5 };
-		enum { kSupport_Unsupported = 0, kSupport_Sliding = 1, kSupport_Supported = 2 };
-	}
 
 	struct Chain
 	{
@@ -82,16 +64,30 @@ namespace Engine
 
 	// ------------------------------------------------------------ singletons
 
-	inline PlayerCharacter * Player()	{ return *(PlayerCharacter **)0x01310588; }	// SKSE LE g_thePlayer
+	inline PlayerCharacter * Player()		{ return *(PlayerCharacter **)0x01310588; }	// SKSE LE g_thePlayer
+	inline void * PlayerControls()			{ return *(void **)0x012E7454; }
+	inline void * ControlMap()				{ return *(void **)0x012E7458; }			// "InputManager" in the SKSE headers
+	inline void * PlayerCamera()			{ return *(void **)0x012E7288; }
+	inline InputStringHolder * UserEvents()	{ return *(InputStringHolder **)0x01B2E388; }
+	inline MenuManager * Menus()			{ return *(MenuManager **)0x012E3548; }
+	inline UIManager * UI()					{ return *(UIManager **)0x012E35E4; }
+	inline void * ScaleformLoader()			{ return *(void **)0x01B2E9B0; }
+
+	inline bool  IsGodMode()				{ return *(bool *)0x01B398C5; }				// set by tgm, 0x0053C9D0
+	inline float GlobalTimeMultiplier()		{ return *(float *)0x012C2410; }			// set by SGTM, 0x0052E1C0
+	inline float HUDOpacity()				{ return *(float *)0x012B6304; }			// fHUDOpacity, read by the HUD at 0x008A9C33
 
 	// --------------------------------------------------------- actor layout
 
 	// TESObjectREFR: rot 0x28, pos 0x34, parentCell 0x40 (SKSE LE headers).
 	// Actor: process 0x88, ActorState 0x64, ActorValueOwner 0x60.
 	inline NiPoint3 & Position(TESObjectREFR * ref)	{ return *(NiPoint3 *)((UInt8 *)ref + 0x34); }
+	inline NiPoint3 & Rotation(TESObjectREFR * ref)	{ return *(NiPoint3 *)((UInt8 *)ref + 0x28); }
 	inline TESObjectCELL * ParentCell(TESObjectREFR * ref) { return *(TESObjectCELL **)((UInt8 *)ref + 0x40); }
 
-	// ActorState's two flag words (same bit layout as Special Edition).
+	// ActorState's two flag words. The bit layout is the same as Special
+	// Edition's; the knock bits were confirmed against the camera code at
+	// 0x00840BE0, which tests (flags04 >> 25) & 7.
 	inline UInt32 & ActorFlags1(Actor * actor)		{ return *(UInt32 *)((UInt8 *)actor + 0x68); }
 	inline UInt32 & ActorFlags2(Actor * actor)		{ return *(UInt32 *)((UInt8 *)actor + 0x6C); }
 
@@ -110,6 +106,7 @@ namespace Engine
 		kFlag2_Staggered		= 1 << 13,
 	};
 
+	inline UInt32 SitSleepState(Actor * actor)	{ return (ActorFlags1(actor) >> 14) & 0x0F; }
 	inline UInt32 LifeState(Actor * actor)		{ return (ActorFlags1(actor) >> 21) & 0x0F; }
 	inline UInt32 KnockState(Actor * actor)		{ return (ActorFlags1(actor) >> 25) & 0x07; }
 	inline UInt32 AttackState(Actor * actor)	{ return (ActorFlags1(actor) >> 28) & 0x0F; }
@@ -120,8 +117,10 @@ namespace Engine
 
 	// IMovementState, the vtable of the ActorState subobject at actor + 0x64.
 	// Slot 5 returns the movement speed the engine itself uses for the
-	// "IsMoving" condition (0x005048C0 compares it against 5.0). It reaches the
-	// character controller, so it answers nothing for an actor still being built.
+	// "IsMoving" condition (0x005048C0 compares it against 5.0).
+	// Virtual, on a subobject of the actor, and it reaches the character
+	// controller inside - so it answers nothing for an actor the game is still
+	// putting together.
 	inline float MovementSpeed(Actor * actor)
 	{
 		Chain chain;
@@ -135,27 +134,102 @@ namespace Engine
 		return fn(state);
 	}
 
-	// ------------------------------------------------- character controller
+	// ActorValueOwner at actor + 0x60. Slot 1 reads a value, slot 6 applies a
+	// modifier - Papyrus DamageActorValue (0x008DD370) calls it with
+	// (kDamage = 2, actorValue, -amount).
+	enum { kActorValue_Health = 0x18, kActorValue_Stamina = 0x1A };
 
-	inline UInt32 ControllerState(void * ctrl)	{ return *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState); }
-
-	// ----------------------------------------------------------------- 3D
-
-	// TESObjectREFR::GetNiRootNode(firstPerson) is vtable slot 0x6F in the SKSE
-	// headers.
-	inline NiNode * Get3D(TESObjectREFR * ref, bool firstPerson)
+	inline float GetActorValue(Actor * actor, UInt32 av)
 	{
-		// A virtual call, so the reference and the table it carries both have to
-		// be there. A reference being torn down is the normal case here.
-		if(!Readable(ref, sizeof(void *))) return NULL;
-		void ** vtable = *(void ***)ref;
-		if(!Readable(vtable, (0x6F + 1) * sizeof(void *))) return NULL;
+		if(!Readable(actor, 0x64)) return 0.0f;
+		void * owner = (UInt8 *)actor + 0x60;
+		void ** vtable = *(void ***)owner;
+		if(!Readable(vtable, 2 * sizeof(void *))) return 0.0f;
 
-		typedef NiNode * (__thiscall * fn_t)(void *, UInt32);
-		return ((fn_t)vtable[0x6F])(ref, firstPerson ? 1 : 0);
+		float (__thiscall * fn)(void *, UInt32) = (float (__thiscall *)(void *, UInt32))vtable[1];
+		return fn(owner, av);
 	}
 
-	// -------------------------------------------- character controller, read
+	inline void DamageActorValue(Actor * actor, UInt32 av, float amount)
+	{
+		if(!Readable(actor, 0x64)) return;
+		void * owner = (UInt8 *)actor + 0x60;
+		void ** vtable = *(void ***)owner;
+		if(!Readable(vtable, 7 * sizeof(void *))) return;
+
+		void (__thiscall * fn)(void *, UInt32, UInt32, float) =
+			(void (__thiscall *)(void *, UInt32, UInt32, float))vtable[6];
+		fn(owner, 2 /* damage modifier */, av, -amount);
+	}
+
+	// AIProcess::UpdateRegenDelay, read out of the bow-zoom stamina path at
+	// 0x0074F5F7.
+	inline void UpdateRegenDelay(Actor * actor, UInt32 av, float delay)
+	{
+		void * process = Link(actor, 0x88);
+		if(!process) return;
+		typedef void (__thiscall * fn_t)(void *, UInt32, float);
+		((fn_t)0x006FCC90)(process, av, delay);
+	}
+
+	// HUDMenu's "the bar flashes because you have none left", 0x00897540.
+	inline void FlashMeter(UInt32 av)
+	{
+		typedef void (__cdecl * fn_t)(UInt32);
+		((fn_t)0x00897540)(av);
+	}
+
+	// The player is in the air when the character controller's Havok state is
+	// hkpCharacterStateType::kInAir. 0x006AB2F0 is the engine's own answer.
+	//
+	// And the engine's own answer walks the player's process chain with a single
+	// null check, which is what killed a tester's game moments after a load: the
+	// chain was half rebuilt and the middle link read as an odd number. The
+	// engine is in no position to doubt that pointer; this mod is, so the chain
+	// is checked here before the question is asked.
+	inline bool PlayerIsInMidair()
+	{
+		// 0x006AB2F0 is a member function: the engine loads the actor into ECX
+		// and calls it (see 0x006AF9E7, 0x006C2F1C, 0x00739985). It is NOT a
+		// free function - calling it as one leaves ECX as whatever the compiler
+		// last put there, and the very next thing it does is read through it.
+		void * player = Player();
+		Chain chain;
+		if(!ActorChain(player, chain)) return false;
+
+		typedef bool (__thiscall * fn_t)(void * actor);
+		return ((fn_t)0x006AB2F0)(player);
+	}
+
+	// ------------------------------------------------- character controller
+
+	// Offsets confirmed in the constructor at 0x00D1E850 and in the users
+	// listed beside each field.
+	namespace Controller
+	{
+		enum
+		{
+			kForwardVec			= 0x040,	// hkVector4, points backwards
+			kSurfaceInfo		= 0x150,	// supportedState is the first byte
+			kContext			= 0x190,	// hkpCharacterContext
+			kCurrentState		= 0x1A0,	// context + 0x10, read by 0x00D42B80
+			kFlags				= 0x1B8,
+			kWaterHeight		= 0x1D8,
+			kFallStartHeight	= 0x1E0,
+			kFallTime			= 0x1E4,
+			kSpeedPct			= 0x204,
+		};
+
+		enum
+		{
+			kFlag_Support					= 1 << 8,
+			kFlag_PotentialSupportManifold	= 1 << 9,
+			kFlag_NoSim						= 1 << 17,
+		};
+
+		enum { kState_OnGround = 0, kState_Jumping = 1, kState_InAir = 2, kState_Climbing = 3, kState_Flying = 4, kState_Swimming = 5 };
+		enum { kSupport_Unsupported = 0, kSupport_Sliding = 1, kSupport_Supported = 2 };
+	}
 
 	inline void * CharController(Actor * actor)
 	{
@@ -163,31 +237,59 @@ namespace Engine
 		return ActorChain(actor, chain) ? chain.controller : NULL;
 	}
 
-	inline UInt8  ControllerSupport(void * ctrl)	{ return *(UInt8 *)((UInt8 *)ctrl + Controller::kSurfaceInfo); }
-	inline float  ControllerFallTime(void * ctrl)	{ return *(float *)((UInt8 *)ctrl + Controller::kFallTime); }
+	inline UInt32 & ControllerFlags(void * ctrl)		{ return *(UInt32 *)((UInt8 *)ctrl + Controller::kFlags); }
+	inline UInt32 ControllerState(void * ctrl)			{ return *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState); }
+	inline UInt8  ControllerSupport(void * ctrl)		{ return *(UInt8 *)((UInt8 *)ctrl + Controller::kSurfaceInfo); }
+	inline float & ControllerFallTime(void * ctrl)		{ return *(float *)((UInt8 *)ctrl + Controller::kFallTime); }
+	inline float & ControllerFallStart(void * ctrl)		{ return *(float *)((UInt8 *)ctrl + Controller::kFallStartHeight); }
+	inline float ControllerSpeedPct(void * ctrl)		{ return *(float *)((UInt8 *)ctrl + Controller::kSpeedPct); }
+	inline float ControllerWaterHeight(void * ctrl)		{ return *(float *)((UInt8 *)ctrl + Controller::kWaterHeight); }
 
-	// The controller's virtual calls. Slot indices match Special Edition's and
-	// were used for writing in the FreeRun NPC project; here they only read.
-	// Slot 6 = linear velocity (metres per second), slot 8 = collision filter.
+	// The controller's virtual calls. Slot indices match Special Edition's;
+	// the implementations read at 0x00D64FE0 and friends confirm the shapes.
+	inline bool ControllerGetPosition(void * ctrl, float * out3)
+	{
+		if(!Readable(ctrl, sizeof(void *))) return false;
+		void ** vtable = *(void ***)ctrl;
+		if(!Readable(vtable, 9*sizeof(void *))) return false;
+		__declspec(align(16)) float aligned[4] = {0,0,0,0};
+		typedef void (__thiscall * fn_t)(void *, float *, bool);
+		((fn_t)vtable[2])(ctrl, aligned, true);
+		out3[0]=aligned[0]; out3[1]=aligned[1]; out3[2]=aligned[2];
+		return true;
+	}
+
+	inline bool ControllerSetPosition(void * ctrl, const float * pos3)
+	{
+		if(!Readable(ctrl, sizeof(void *))) return false;
+		void ** vtable = *(void ***)ctrl;
+		if(!Readable(vtable, 9*sizeof(void *))) return false;
+		__declspec(align(16)) float aligned[4] = {pos3[0], pos3[1], pos3[2], 0};
+		typedef void (__thiscall * fn_t)(void *, const float *, bool, bool);
+		((fn_t)vtable[3])(ctrl, aligned, true, false);
+		return true;
+	}
+
 	inline bool ControllerGetLinearVelocity(void * ctrl, float * outVec4)
 	{
 		if(!Readable(ctrl, sizeof(void *))) return false;
 		void ** vtable = *(void ***)ctrl;
-		if(!Readable(vtable, 9 * sizeof(void *))) return false;
-
-		// The engine writes the result with an aligned SSE store, so the buffer
-		// it is given has to start on a 16 byte boundary. A plain float[4] on
-		// the caller's stack does not, and faulted in version 0.2.0. The local
-		// copy here makes the alignment this function's business, not its
-		// callers'.
-		__declspec(align(16)) float aligned[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		if(!Readable(vtable, 9*sizeof(void *))) return false;
+		__declspec(align(16)) float aligned[4] = {0,0,0,0};
 		typedef void (__thiscall * fn_t)(void *, float *);
 		((fn_t)vtable[6])(ctrl, aligned);
+		outVec4[0]=aligned[0]; outVec4[1]=aligned[1]; outVec4[2]=aligned[2]; outVec4[3]=aligned[3];
+		return true;
+	}
 
-		outVec4[0] = aligned[0];
-		outVec4[1] = aligned[1];
-		outVec4[2] = aligned[2];
-		outVec4[3] = aligned[3];
+	inline bool ControllerSetLinearVelocity(void * ctrl, float x, float y, float z)
+	{
+		if(!Readable(ctrl, sizeof(void *))) return false;
+		void ** vtable = *(void ***)ctrl;
+		if(!Readable(vtable, 9*sizeof(void *))) return false;
+		__declspec(align(16)) float aligned[4] = {x, y, z, 0};
+		typedef void (__thiscall * fn_t)(void *, const float *);
+		((fn_t)vtable[7])(ctrl, aligned);
 		return true;
 	}
 
@@ -199,134 +301,23 @@ namespace Engine
 		return out;
 	}
 
-	// ------------------------------------------------------------------ combat
-
-	// The engine's own "is this actor in combat", found in GreenTea.dll, which
-	// implements its IsInCombat condition as exactly this one call: vtable
-	// offset 0x388, slot 0xE2, no arguments. It does not depend on a weapon
-	// (wolves, trolls and horses answer it too) and says nothing about WHO the
-	// actor is fighting.
-	inline bool IsInCombat(Actor * actor)
-	{
-		if(!Readable(actor, sizeof(void *))) return false;
-		void ** vtable = *(void ***)actor;
-		if(!Readable(vtable, (0xE2 + 1) * sizeof(void *))) return false;
-		typedef bool (__thiscall * fn_t)(void *);
-		return ((fn_t)vtable[0xE2])(actor);
-	}
-
-	// --------------------------------------------------------------- memory
-
-	// The game's own heap. The Havok layer allocates its collision shapes here.
-	inline void * HeapAllocate(UInt32 size, UInt32 alignment, bool aligned)
-	{
-		typedef void * (__thiscall * fn_t)(void *, UInt32, UInt32, bool);
-		return ((fn_t)0x00A48D60)((void *)0x01B418B0, size, alignment, aligned);
-	}
-
-	inline void HeapFree(void * mem, bool aligned)
-	{
-		typedef void (__thiscall * fn_t)(void *, void *, bool);
-		((fn_t)0x00A487B0)((void *)0x01B418B0, mem, aligned);
-	}
-
-	// ------------------------------------------- character controller, write
-	//
-	// Everything below changes the game. These are the three primitives the
-	// FreeRun NPC project proved on NPCs in game: put the controller somewhere,
-	// set its velocity, and turn its physics off while that is going on.
-	// Vectors are in the physics world's metres; the engine writes and reads
-	// them with aligned SSE moves, so every buffer handed to it is aligned here
-	// rather than trusted to the caller.
-
-	inline UInt32 & ControllerFlags(void * ctrl)	{ return *(UInt32 *)((UInt8 *)ctrl + Controller::kFlags); }
-
-	inline bool ControllerGetPosition(void * ctrl, float * out3)
-	{
-		if(!Readable(ctrl, sizeof(void *))) return false;
-		void ** vtable = *(void ***)ctrl;
-		if(!Readable(vtable, 9 * sizeof(void *))) return false;
-
-		__declspec(align(16)) float aligned[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		typedef void (__thiscall * fn_t)(void *, float *, bool);
-		((fn_t)vtable[2])(ctrl, aligned, true);
-		out3[0] = aligned[0]; out3[1] = aligned[1]; out3[2] = aligned[2];
-		return true;
-	}
-
-	inline bool ControllerSetPosition(void * ctrl, const float * pos3)
-	{
-		if(!Readable(ctrl, sizeof(void *))) return false;
-		void ** vtable = *(void ***)ctrl;
-		if(!Readable(vtable, 9 * sizeof(void *))) return false;
-
-		__declspec(align(16)) float aligned[4] = { pos3[0], pos3[1], pos3[2], 0.0f };
-		typedef void (__thiscall * fn_t)(void *, const float *, bool, bool);
-		((fn_t)vtable[3])(ctrl, aligned, true, false);
-		return true;
-	}
-
-	inline bool ControllerSetLinearVelocity(void * ctrl, float x, float y, float z)
-	{
-		if(!Readable(ctrl, sizeof(void *))) return false;
-		void ** vtable = *(void ***)ctrl;
-		if(!Readable(vtable, 9 * sizeof(void *))) return false;
-
-		__declspec(align(16)) float aligned[4] = { x, y, z, 0.0f };
-		typedef void (__thiscall * fn_t)(void *, const float *);
-		((fn_t)vtable[7])(ctrl, aligned);
-		return true;
-	}
-
-	// ---------------------------------------------------------------- target
-
-	// Where the engine keeps what an actor is fighting: a reference handle, at
-	// actor + 0x90. Found by comparing NPCs in combat with NPCs that were not
-	// (338 of 410 samples in combat held the player's handle there, 0 of 42
-	// out of combat held anything). 0 means no target.
-	enum { kPlayerHandle = 0x00100000 };
-	inline UInt32 CombatTargetHandle(Actor * actor)
-	{
-		if(!Readable(actor, 0x94)) return 0;
-		return *(UInt32 *)((UInt8 *)actor + 0x90);
-	}
-
 	// ------------------------------------------------------ animation graph
 
-	// The holder is a subobject of every reference at + 0x20.
+	// The holder is a subobject of every reference at + 0x20. Papyrus'
+	// GetAnimationVariableBool (0x00903390) calls slot 0x12 on it.
 	inline void * GraphHolder(TESObjectREFR * ref)	{ return (UInt8 *)ref + 0x20; }
 
-	// The holder's table, checked as far as the slot being called. A reference
-	// the game is building or tearing down has a holder too, with whatever
-	// table pointer the memory happened to hold.
+	// The holder's table, checked as far as the slot being called.
+	//
+	// The holder is a subobject of the reference, so a reference the game is
+	// building or tearing down has one too - with whatever table pointer the
+	// memory happened to hold. Every call below goes through this.
 	inline void ** HolderVtable(TESObjectREFR * ref, UInt32 slot)
 	{
 		if(!Readable(ref, 0x24)) return NULL;
 		void ** vtable = *(void ***)((UInt8 *)ref + 0x20);
 		return Readable(vtable, (slot + 1) * sizeof(void *)) ? vtable : NULL;
 	}
-
-	// Sends an event to the actor's animation graph. False if the graph does
-	// not take it.
-	inline bool NotifyAnimationGraph(TESObjectREFR * ref, const char * eventName)
-	{
-		void ** vtable = HolderVtable(ref, 0x01);
-		if(!vtable) return false;
-
-		BSFixedString name;
-		CALL_MEMBER_FN(&name, Set)(eventName);
-		typedef bool (__thiscall * fn_t)(void *, const BSFixedString &);
-		const bool ok = ((fn_t)vtable[0x01])(GraphHolder(ref), name);
-		CALL_MEMBER_FN(&name, Release)();
-		return ok;
-	}
-
-	// ------------------------------------------------- graph variables
-	//
-	// Read through the holder's own table; written through the engine's setters,
-	// which are plain functions (their first bytes are checked by Verify at start).
-	// Each wrapper builds the name, uses it and gives it back, so nothing here
-	// holds a string past its call.
 
 	inline bool GetGraphVariableBool(TESObjectREFR * ref, const BSFixedString & name, bool & out)
 	{
@@ -344,6 +335,14 @@ namespace Engine
 		return ((fn_t)vtable[0x11])(GraphHolder(ref), name, out);
 	}
 
+	inline bool GetGraphVariableFloat(TESObjectREFR * ref, const BSFixedString & name, float & out)
+	{
+		void ** vtable = HolderVtable(ref, 0x10);
+		if(!vtable) return false;
+		typedef bool (__thiscall * fn_t)(void *, const BSFixedString &, float &);
+		return ((fn_t)vtable[0x10])(GraphHolder(ref), name, out);
+	}
+
 	inline bool SetGraphVariableBool(TESObjectREFR * ref, const BSFixedString & name, bool value)
 	{
 		if(!Readable(ref, 0x24)) return false;
@@ -358,54 +357,293 @@ namespace Engine
 		return ((fn_t)0x00650C80)(GraphHolder(ref), name, value);
 	}
 
-	inline bool GraphGetBool(TESObjectREFR * ref, const char * var, bool & out)
+	inline bool SetGraphVariableFloat(TESObjectREFR * ref, const BSFixedString & name, float value)
 	{
-		BSFixedString n;
-		CALL_MEMBER_FN(&n, Set)(var);
-		const bool ok = GetGraphVariableBool(ref, n, out);
-		CALL_MEMBER_FN(&n, Release)();
+		if(!Readable(ref, 0x24)) return false;
+		typedef bool (__thiscall * fn_t)(void *, const BSFixedString &, float);
+		return ((fn_t)0x00650CA0)(GraphHolder(ref), name, value);
+	}
+
+	inline bool NotifyAnimationGraph(TESObjectREFR * ref, const char * eventName)
+	{
+		void ** vtable = HolderVtable(ref, 0x01);
+		if(!vtable) return false;
+		BSFixedString name; CALL_MEMBER_FN(&name, Set)(eventName);
+		typedef bool (__thiscall * fn_t)(void *, const BSFixedString &);
+		const bool ok = ((fn_t)vtable[0x01])(GraphHolder(ref), name);
+		CALL_MEMBER_FN(&name, Release)();
 		return ok;
 	}
 
-	inline bool GraphGetInt(TESObjectREFR * ref, const char * var, SInt32 & out)
+	inline bool GetAnimationGraphManager(TESObjectREFR * ref, void *& outManagerPtr)
 	{
-		BSFixedString n;
-		CALL_MEMBER_FN(&n, Set)(var);
-		const bool ok = GetGraphVariableInt(ref, n, out);
-		CALL_MEMBER_FN(&n, Release)();
-		return ok;
+		void ** vtable = HolderVtable(ref, 0x02);
+		if(!vtable) return false;
+		typedef bool (__thiscall * fn_t)(void *, void **);
+		return ((fn_t)vtable[0x02])(GraphHolder(ref), &outManagerPtr);
 	}
 
-	inline bool GraphSetBool(TESObjectREFR * ref, const char * var, bool value)
+	// BSAnimationGraphManager, laid out by the constructor at 0x00BA7B60 and
+	// walked by Update at 0x00BA7C90.
+	namespace GraphManager
 	{
-		BSFixedString n;
-		CALL_MEMBER_FN(&n, Set)(var);
-		const bool ok = SetGraphVariableBool(ref, n, value);
-		CALL_MEMBER_FN(&n, Release)();
-		return ok;
+		enum
+		{
+			kBoundChannels	= 0x08,		// data, capacity, size
+			kGraphs			= 0x20,		// small array: capacity/flag, data, size
+			kActiveGraph	= 0x5C,
+		};
 	}
 
-	inline bool GraphSetInt(TESObjectREFR * ref, const char * var, SInt32 value)
+	inline void * ActiveGraph(void * manager)
 	{
-		BSFixedString n;
-		CALL_MEMBER_FN(&n, Set)(var);
-		const bool ok = SetGraphVariableInt(ref, n, value);
-		CALL_MEMBER_FN(&n, Release)();
-		return ok;
+		if(!manager) return NULL;
+		const UInt32 capacity	= *(UInt32 *)((UInt8 *)manager + GraphManager::kGraphs + 0x00);
+		const UInt32 size		= *(UInt32 *)((UInt8 *)manager + GraphManager::kGraphs + 0x08);
+		if(!size) return NULL;
+		void ** data = (capacity & 0x80000000)
+					 ? (void **)((UInt8 *)manager + GraphManager::kGraphs + 0x04)
+					 : *(void ***)((UInt8 *)manager + GraphManager::kGraphs + 0x04);
+		UInt32 index = *(UInt32 *)((UInt8 *)manager + GraphManager::kActiveGraph);
+		if(index >= size) index = 0;
+		return data[index];
 	}
 
-	// The controller's state and its fall bookkeeping, written. FluidMotion does
-	// the same every frame of a driven flight: the state says "in the air" so the
-	// animation graph plays the fall pose, and the fall start height is kept at
-	// the current height so that landing is not read as a fall from where the
-	// flight began (that is what fall damage is computed from). The height is in
-	// game units, the same as the actor's position (the FreeRun project compares
-	// the two directly).
-	inline void ControllerSetState(void * ctrl, UInt32 state)	{ *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState) = state; }
+	// ------------------------------------------------------------- controls
+
+	// ControlMap::ToggleControls, 0x00A67A30. The user-event flags are the same
+	// values as Special Edition's.
+	enum
+	{
+		kControl_Movement	= 1 << 0,
+		kControl_Looking	= 1 << 1,
+		kControl_Activate	= 1 << 2,
+		kControl_Menu		= 1 << 3,
+		kControl_Console	= 1 << 4,
+		kControl_POVSwitch	= 1 << 5,
+		kControl_Fighting	= 1 << 6,
+		kControl_Sneaking	= 1 << 7,
+		kControl_MainFour	= 1 << 8,
+		kControl_WheelZoom	= 1 << 9,
+		kControl_Jumping	= 1 << 10,
+		kControl_VATS		= 1 << 11,
+	};
+
+	inline UInt32 EnabledControls()
+	{
+		void * map = ControlMap();
+		return map ? *(UInt32 *)((UInt8 *)map + 0x90) : 0xFFFFFFFF;
+	}
+
+	inline void ToggleControls(UInt32 flags, bool enable)
+	{
+		void * map = ControlMap();
+		if(!map) return;
+		typedef void (__thiscall * fn_t)(void *, UInt32, bool, bool);
+		((fn_t)0x00A67A30)(map, flags, enable, true);
+	}
+
+	// Whether this plugin is the one holding jumping and the main four shut. The
+	// main four are the tween menu and the inventory / magic / map / skills keys,
+	// on a gamepad as on a keyboard: a stop event that never arrives (a ragdoll, a
+	// reset, a load, a slide the behaviour refused) used to leave them shut for the
+	// rest of the session. Every place that shuts them goes through here, and the
+	// tick gives them back the moment nothing of ours is running.
+	extern bool ActionControlsHeld;
+
+	inline void HoldActionControls(bool hold)
+	{
+		ToggleControls(kControl_Jumping, !hold);
+		ToggleControls(kControl_MainFour, !hold);
+		ActionControlsHeld = hold;
+	}
+
+	inline void ReleaseActionControls()
+	{
+		if(ActionControlsHeld) HoldActionControls(false);
+	}
+
+	// The control map's enabled flags travel in the save. A save made while an
+	// older build had the main four shut - or one of this build's own holds that
+	// never got its end event - loads with them still shut and with nobody
+	// holding them, so ReleaseActionControls has nothing to give back. The
+	// signature is specific: jumping and/or the main four off while movement,
+	// looking, fighting and the menu are all on. A scripted lock-out (the
+	// opening cart, a cutscene) turns off movement and the rest with them, and
+	// is left alone. Returns true if it opened anything.
+	inline bool RepairStuckControls(UInt32 & before)
+	{
+		before = EnabledControls();
+		const UInt32 core = kControl_Movement | kControl_Looking | kControl_Fighting | kControl_Menu;
+		if((before & core) != core) return false;
+
+		const UInt32 ours = kControl_Jumping | kControl_MainFour;
+		if((before & ours) == ours) return false;
+
+		ToggleControls(ours & ~before, true);
+		return true;
+	}
+
+	// PlayerControls' movement data starts at + 0x14; autoMove is data + 0x24
+	// (AutoMoveHandler at 0x00770FD0 toggles it).
+	inline bool AutoMove()
+	{
+		void * controls = PlayerControls();
+		return controls ? *(bool *)((UInt8 *)controls + 0x38) : false;
+	}
+
+	// --------------------------------------------------------------- camera
+
+	// PlayerCamera is a TESCamera: current state at + 0x20, and every state
+	// carries its id at + 0x0C.
+	inline void * CameraState()
+	{
+		void * camera = PlayerCamera();
+		return camera ? *(void **)((UInt8 *)camera + 0x20) : NULL;
+	}
+
+	enum { kCameraState_FirstPerson = 0, kCameraState_ThirdPerson = 9 };
+
+	inline UInt32 CameraStateID(void * state)	{ return state ? *(UInt32 *)((UInt8 *)state + 0x0C) : 0xFFFFFFFF; }
+
+	namespace ThirdPerson
+	{
+		enum
+		{
+			kTargetZoomOffset	= 0x54,
+			kCurrentZoomOffset	= 0x58,
+			kTargetYaw			= 0x5C,
+			kCurrentYaw			= 0x60,
+			kFreeRotation		= 0xAC,		// NiPoint2
+			kStateNotActive		= 0xB5,
+		};
+	}
+
+	namespace FirstPerson
+	{
+		enum { kSittingRotation = 0x20 };	// added to the camera yaw by 0x00839F60
+	}
+
+	// --------------------------------------------------------------- memory
+
+	// The game's own heap. Anything the engine will later free itself, or that
+	// holds an engine object, has to come from here.
+	inline void * HeapAllocate(UInt32 size, UInt32 alignment, bool aligned)
+	{
+		typedef void * (__thiscall * fn_t)(void *, UInt32, UInt32, bool);
+		return ((fn_t)0x00A48D60)((void *)0x01B418B0, size, alignment, aligned);
+	}
+
+	inline void HeapFree(void * mem, bool aligned)
+	{
+		typedef void (__thiscall * fn_t)(void *, void *, bool);
+		((fn_t)0x00A487B0)((void *)0x01B418B0, mem, aligned);
+	}
+
+	// ------------------------------------------------------------- messages
+
+	// The engine's message box, as Papyrus' Debug.MessageBox calls it
+	// (0x008EE530 -> 0x0087AC60).
+	void MessageBox(const char * text);
+
+	// ----------------------------------------------------------- 3D / scale
+
+	// TESObjectREFR::GetNiRootNode(firstPerson) is vtable slot 0x6F in the
+	// SKSE headers; the third person root is what carries the actor's scale.
+	inline NiNode * Get3D(TESObjectREFR * ref, bool firstPerson)
+	{
+		// A virtual call, so the reference and the table it carries both have to
+		// be there. A reference that is being torn down is the normal case here,
+		// not the exceptional one.
+		if(!Readable(ref, sizeof(void *))) return NULL;
+		void ** vtable = *(void ***)ref;
+		if(!Readable(vtable, (0x6F + 1) * sizeof(void *))) return NULL;
+
+		typedef NiNode * (__thiscall * fn_t)(void *, UInt32);
+		return ((fn_t)vtable[0x6F])(ref, firstPerson ? 1 : 0);
+	}
+
+	// ---------------------------------------------------------------- combat
+
+	enum { kPlayerHandle = 0x00100000 };
+
+	inline UInt32 CombatTargetHandle(Actor * actor)
+	{ return Readable(actor, 0x94) ? *(UInt32 *)((UInt8 *)actor + 0x90) : 0; }
+
+	inline bool IsInCombat(Actor * actor)
+	{
+		if(!Readable(actor, sizeof(void *))) return false;
+		void ** vtable = *(void ***)actor;
+		if(!Readable(vtable, (0xE2+1)*sizeof(void *))) return false;
+		typedef bool (__thiscall * fn_t)(void *);
+		return ((fn_t)vtable[0xE2])(actor);
+	}
+
+	// -------------------------------------------- controller write (flight)
+
+	inline void ControllerSetState(void * ctrl, UInt32 state)
+	{ *(UInt32 *)((UInt8 *)ctrl + Controller::kCurrentState) = state; }
 
 	inline void ControllerSetFall(void * ctrl, float startHeight)
 	{
 		*(float *)((UInt8 *)ctrl + Controller::kFallStartHeight) = startHeight;
 		*(float *)((UInt8 *)ctrl + Controller::kFallTime) = 0.0f;
+	}
+
+	// ---------------------------------------------------------------- rotation
+
+	inline void SetFacing(TESObjectREFR * ref, void * ctrl, float yaw)
+	{
+		Rotation(ref).z = yaw;
+		if(ctrl)
+		{
+			float * fwd = (float *)((UInt8 *)ctrl + Controller::kForwardVec);
+			fwd[0] = -sinf(yaw);
+			fwd[1] = -cosf(yaw);
+		}
+	}
+
+	inline float FacingAngle(TESObjectREFR * npc, const NiPoint3 & target)
+	{
+		const NiPoint3 & npos = Position(npc);
+		const float dx = target.x - npos.x, dy = target.y - npos.y;
+		if(dx == 0.0f && dy == 0.0f) return 0.0f;
+		const float yaw = Rotation(npc).z;
+		const float fx = -sinf(yaw), fy = -cosf(yaw);
+		const float len = sqrtf(dx*dx + dy*dy);
+		const float cosA = (fx*dx + fy*dy) / len;
+		return acosf(cosA < -1.0f ? -1.0f : cosA > 1.0f ? 1.0f : cosA);
+	}
+
+	// ------------------------------------- graph variable wrappers (char * names)
+
+	inline bool GraphGetBool(TESObjectREFR * ref, const char * var, bool & out)
+	{
+		BSFixedString n; CALL_MEMBER_FN(&n, Set)(var);
+		const bool ok = GetGraphVariableBool(ref, n, out);
+		CALL_MEMBER_FN(&n, Release)(); return ok;
+	}
+
+	inline bool GraphGetInt(TESObjectREFR * ref, const char * var, SInt32 & out)
+	{
+		BSFixedString n; CALL_MEMBER_FN(&n, Set)(var);
+		const bool ok = GetGraphVariableInt(ref, n, out);
+		CALL_MEMBER_FN(&n, Release)(); return ok;
+	}
+
+	inline bool GraphSetBool(TESObjectREFR * ref, const char * var, bool value)
+	{
+		if(!Readable(ref, 0x24)) return false;
+		BSFixedString n; CALL_MEMBER_FN(&n, Set)(var);
+		const bool ok = SetGraphVariableBool(ref, n, value);
+		CALL_MEMBER_FN(&n, Release)(); return ok;
+	}
+
+	inline bool GraphSetInt(TESObjectREFR * ref, const char * var, SInt32 value)
+	{
+		if(!Readable(ref, 0x24)) return false;
+		BSFixedString n; CALL_MEMBER_FN(&n, Set)(var);
+		const bool ok = SetGraphVariableInt(ref, n, value);
+		CALL_MEMBER_FN(&n, Release)(); return ok;
 	}
 }

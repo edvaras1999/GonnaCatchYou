@@ -31,6 +31,7 @@ namespace Settings
 	float	leapMaxSpeed		= 650.0f;
 	float	leapLandNear		= 100.0f;
 	bool	leapNeedSight		= true;
+	UInt32	leapJumpCooldown	= 6000;
 	UInt32	leapStallMs			= 1500;
 	float	jumpMinPlayerDistance = 100.0f;
 	UInt32	jumpCooldownMs		= 4000;
@@ -128,6 +129,7 @@ namespace Settings
 		leapMaxSpeed		= ReadFloat("fLeapMaxSpeed", 650.0f);
 		leapLandNear		= ReadFloat("fLeapLandNear", 100.0f);
 		leapNeedSight		= ReadInt("bLeapNeedSight", 1) != 0;
+		v = ReadInt("iLeapJumpCooldown", 6000);	leapJumpCooldown = v < 2000 ? 2000 : (UInt32)v;
 		if(leapMaxDistance < 200.0f) leapMaxDistance = 200.0f;
 		if(leapMaxDistance > 900.0f) leapMaxDistance = 900.0f;
 		if(leapGravity < 300.0f) leapGravity = 300.0f;

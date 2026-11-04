@@ -40,6 +40,7 @@ namespace Jump
 
 	bool	Active(UInt32 id);		// is this NPC in the air right now
 	bool	WasRescued(UInt32 id);	// true until the aftermath clears it
+	bool	JustLanded(UInt32 id);	// true for one sample after the hop's arc ends
 	UInt32	ActiveCount();
 
 	// Every frame. Moves each leap along, watches the landings, and writes the

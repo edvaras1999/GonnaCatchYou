@@ -228,6 +228,14 @@ namespace
 			if(Engine::ControllerState(chain.controller) != Engine::Controller::kState_OnGround) return false;
 			if(!Engine::ControllerGetPosition(chain.controller, h.c0)) return false;
 
+			// Turn to face the landing before the arc begins.
+			// Only the heading is changed; the position is not touched.
+			{
+				const Jump::Plan & p = h.plan;
+				const float yaw = atan2f(-p.dir.x, -p.dir.y);
+				Engine::SetFacing((TESObjectREFR *)h.npc, chain.controller, yaw);
+			}
+
 			*eventOk = false;
 			if(Settings::jumpAnimation && Settings::jumpStartEvent[0])
 				*eventOk = Engine::NotifyAnimationGraph(h.npc, Settings::jumpStartEvent);
@@ -322,6 +330,14 @@ namespace Jump
 	{
 		for(int i = 0; i < kMaxHops; ++i)
 			if(s_hops[i].used && s_hops[i].id == id && s_hops[i].rescued) return true;
+		return false;
+	}
+
+	bool JustLanded(UInt32 id)
+	{
+		// phase 2 = just landed, watching. True for the first sample after the arc ends.
+		for(int i = 0; i < kMaxHops; ++i)
+			if(s_hops[i].used && s_hops[i].id == id && s_hops[i].phase == 2 && !s_hops[i].settleLogged) return true;
 		return false;
 	}
 

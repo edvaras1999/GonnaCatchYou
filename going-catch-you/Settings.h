@@ -28,6 +28,7 @@ namespace Settings
 	extern float	leapMaxSpeed;		// fLeapMaxSpeed       the fastest it goes along, units/s
 	extern float	leapLandNear;		// fLeapLandNear       how close to the player it tries to land
 	extern bool		leapNeedSight;		// bLeapNeedSight      a standing hunter leaps only if it can see the player
+	extern UInt32	leapJumpCooldown;	// iLeapJumpCooldown   cooldown after a completed leap (longer than the base cooldown)
 	extern UInt32	leapStallMs;		// iLeapStallMs        how long a hunter has to stand still before it leaps
 	extern float	jumpMinPlayerDistance;// fJumpMinPlayerDistance  a hunter nearer than this to the player does not hop
 	extern UInt32	jumpCooldownMs;		// iJumpCooldownMs     between two attempts for the same NPC

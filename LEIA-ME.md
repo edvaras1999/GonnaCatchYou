@@ -1,10 +1,17 @@
-# Going Catch You — versão 0.5.2
+# Going Catch You — versão 0.5.3
 
 Um caçador que **não se aproxima de ti** passa a **saltar na tua direção**, em vez de ficar parado a encarar-te ou a dar a volta. **Esta versão altera os NPCs.**
 
 > **Estado:** a mecânica do salto funciona (confirmado na 0.5.0: 25 aterragens, todos no chão). A 0.5.1 corrige três problemas dessa versão (ver abaixo). Ainda não foi testada em jogo. Se algo correr mal, `bJump=0` no INI volta ao modo só de leitura, `bJumpDryRun=1` planeia e escreve no log sem fazer nada, e `bManualKeys=0` desliga a tecla de teste.
 
-## O que mudou na 0.5.2 (em relação à 0.5.1)
+## O que mudou na 0.5.3 (em relação à 0.5.2)
+
+1. **Acima do jogador:** se o NPC estiver mais de 60 unidades acima, não salta — desce pela IA normal.
+2. **Sem saltos durante aproximação:** se o NPC estava a aproximar-se em média nos últimos segundos (`closingAvg > 20 u/s`), é uma pausa breve, não um bloqueio. Não salta.
+3. **Roda antes de saltar:** o NPC é virado para o jogador antes de o arco começar, escrevendo a rotação e o vetor de frente do controlador. Corrige os saltos laterais.
+4. **Cooldown após qualquer aterragem:** depois de saltar (não só após resgate), aguarda `iLeapJumpCooldown` ms antes de tentar de novo (padrão: 6 s), dando tempo à IA de retomar.
+
+## O que estava na 0.5.2 e se mantém
 
 **Três zonas ao redor do jogador:**
 
